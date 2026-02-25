@@ -1,0 +1,10 @@
+workload,run,real_sec,user_sec,sys_sec
+sequential,1,0.0100,0.0020,0.0040
+sequential,2,0.0180,0.0040,0.0060
+sequential,3,0.0160,0.0030,0.0050
+random,1,0.0360,0.0100,0.0170
+random,2,0.0580,0.0150,0.0300
+random,3,0.0500,0.0140,0.0250
+phase_change,1,0.0460,0.0110,0.0200
+phase_change,2,0.0440,0.0110,0.0200
+phase_change,3,0.0420,0.0100,0.0180
