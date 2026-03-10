@@ -1,0 +1,16 @@
+timestamp,mode,path,offset,size,phase,confidence,prefetch,prefetch_offset,prefetch_size,prefetch_depth
+1773162806.330233,none,/big.txt,20480,4096,unknown,0.0000,0,,,1
+1773162806.335468,none,/big.txt,491520,4096,irregular,0.0000,0,,,1
+1773162806.3394802,none,/big.txt,172032,4096,irregular,0.0000,0,,,1
+1773162806.3422348,none,/big.txt,1228800,4096,irregular,0.0000,0,,,1
+1773162806.344898,none,/big.txt,69632,4096,irregular,0.0000,0,,,1
+1773162806.347544,none,/big.txt,1024000,4096,irregular,0.0000,0,,,1
+1773162806.350175,none,/big.txt,360448,4096,irregular,0.0000,0,,,1
+1773162806.352661,none,/big.txt,778240,4096,irregular,0.0000,0,,,1
+1773162806.354665,none,/big.txt,245760,4096,irregular,0.0000,0,,,1
+1773162806.35659,none,/big.txt,40960,4096,irregular,0.0000,0,,,1
+1773162806.358437,none,/big.txt,1126400,4096,irregular,0.0000,0,,,1
+1773162806.360231,none,/big.txt,135168,4096,irregular,0.0000,0,,,1
+1773162806.3620648,none,/big.txt,655360,4096,irregular,0.0000,0,,,1
+1773162806.3638241,none,/big.txt,860160,4096,irregular,0.0000,0,,,1
+1773162806.3657138,none,/big.txt,389120,4096,irregular,0.0000,0,,,1
