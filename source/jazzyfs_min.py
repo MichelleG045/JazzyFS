@@ -81,16 +81,20 @@ class PassthroughRO(Operations):
 
         os.makedirs(os.path.dirname(self.log_path), exist_ok=True)
 
-        if not os.path.exists(self.log_path):
-            with open(self.log_path, "w", newline="") as f:
-                csv.writer(f).writerow(["seq", "timestamp", "path", "offset", "size"])
+        write_access_header = not os.path.exists(self.log_path) or os.path.getsize(self.log_path) == 0
+        self._log_f = open(self.log_path, "a", newline="")
+        self._log_writer = csv.writer(self._log_f)
+        if write_access_header:
+            self._log_writer.writerow(["seq", "timestamp", "path", "offset", "size"])
 
-        if not os.path.exists(self.decision_log_path):
-            with open(self.decision_log_path, "w", newline="") as f:
-                csv.writer(f).writerow([
-                    "timestamp", "mode", "path", "offset", "size",
-                    "phase", "confidence", "prefetch", "prefetch_offset", "prefetch_size", "prefetch_depth"
-                ])
+        write_decision_header = not os.path.exists(self.decision_log_path) or os.path.getsize(self.decision_log_path) == 0
+        self._decision_f = open(self.decision_log_path, "a", newline="")
+        self._decision_writer = csv.writer(self._decision_f)
+        if write_decision_header:
+            self._decision_writer.writerow([
+                "timestamp", "mode", "path", "offset", "size",
+                "phase", "confidence", "prefetch", "prefetch_offset", "prefetch_size", "prefetch_depth"
+            ])
 
         # --------------------------------------------------
         # Shared State
@@ -127,18 +131,18 @@ class PassthroughRO(Operations):
 
     def _log_read(self, path, offset, size):
         self.seq += 1
-        with open(self.log_path, "a", newline="") as f:
-            csv.writer(f).writerow([self.seq, time.time(), path, offset, size])
+        self._log_writer.writerow([self.seq, time.time(), path, offset, size])
+        self._log_f.flush()
 
     def _log_decision(self, path, offset, size, phase, confidence, prefetch, prefetch_offset):
-        with open(self.decision_log_path, "a", newline="") as f:
-            csv.writer(f).writerow([
+        self._decision_writer.writerow([
                 time.time(), self.mode, path, offset, size,
                 phase, f"{confidence:.4f}", int(prefetch),
                 prefetch_offset if prefetch else "",
                 self.prefetch_size if prefetch else "",
                 self.prefetch_depth
             ])
+        self._decision_f.flush()
 
     # --------------------------------------------------
     # Adaptive Logic
