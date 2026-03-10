@@ -20,6 +20,9 @@ PHASE_WINDOW = 5
 # Minimum confidence required before enabling adaptive prefetching
 CONFIDENCE_THRESHOLD = 0.7
 
+# Number of blocks to prefetch ahead (1 = next block only, 2 = next two blocks, etc.)
+PREFETCH_DEPTH = int(os.environ.get("JAZZYFS_PREFETCH_DEPTH", "1"))
+
 # Total duration of musical playback after workload completes
 TOTAL_PLAY_TIME = 8.0
 
@@ -86,7 +89,7 @@ class PassthroughRO(Operations):
             with open(self.decision_log_path, "w", newline="") as f:
                 csv.writer(f).writerow([
                     "timestamp", "mode", "path", "offset", "size",
-                    "phase", "confidence", "prefetch", "prefetch_offset", "prefetch_size"
+                    "phase", "confidence", "prefetch", "prefetch_offset", "prefetch_size", "prefetch_depth"
                 ])
 
         # --------------------------------------------------
@@ -94,6 +97,7 @@ class PassthroughRO(Operations):
         # --------------------------------------------------
         self.trace = deque(maxlen=1000)
         self.prefetch_size = 4096
+        self.prefetch_depth = PREFETCH_DEPTH
         self.prefetch_enabled = True
 
         # --------------------------------------------------
@@ -109,9 +113,10 @@ class PassthroughRO(Operations):
         self.last_read_time = time.time()
         self.melody_playing = False
 
-        print(f"[JazzyFS] Mode     = {self.mode}")
-        print(f"[JazzyFS] Sound    = {self.sound_enabled}")
-        print(f"[JazzyFS] Logging  = {self.log_path}")
+        print(f"[JazzyFS] Mode           = {self.mode}")
+        print(f"[JazzyFS] Prefetch Depth = {self.prefetch_depth}")
+        print(f"[JazzyFS] Sound          = {self.sound_enabled}")
+        print(f"[JazzyFS] Logging        = {self.log_path}")
 
         if self.sound_enabled:
             threading.Thread(target=self._monitor_completion, daemon=True).start()
@@ -131,7 +136,8 @@ class PassthroughRO(Operations):
                 time.time(), self.mode, path, offset, size,
                 phase, f"{confidence:.4f}", int(prefetch),
                 prefetch_offset if prefetch else "",
-                self.prefetch_size if prefetch else ""
+                self.prefetch_size if prefetch else "",
+                self.prefetch_depth
             ])
 
     # --------------------------------------------------
@@ -175,8 +181,9 @@ class PassthroughRO(Operations):
         # Read-ahead to warm the OS cache — never affects correctness
         try:
             with open(full_path, "rb") as f:
-                f.seek(next_offset)
-                f.read(size)
+                for i in range(self.prefetch_depth):
+                    f.seek(next_offset + i * self.prefetch_size)
+                    f.read(size)
         except Exception:
             pass
 
