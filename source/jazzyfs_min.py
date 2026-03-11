@@ -114,6 +114,8 @@ class PassthroughRO(Operations):
         # Sonification State
         # --------------------------------------------------
         self.phase_history = []
+        self.confidence_history = []
+        self.prefetch_history = []
         self.last_read_time = time.time()
         self.melody_playing = False
 
@@ -207,8 +209,8 @@ class PassthroughRO(Operations):
 
         return compressed
 
-    def _play_segment(self, duration, tempo):
-        # Play a segment of the scale at the given tempo
+    def _play_segment(self, duration, tempo, vol, prefetch_rate):
+        # Play a segment of the scale at the given tempo, volume, and chord density
         scale = SCALES.get(self.mode, SCALES[MODE_ADAPTIVE])
         note_index = 0
         start = time.time()
@@ -217,14 +219,37 @@ class PassthroughRO(Operations):
             note = scale[note_index % len(scale)]
             freq = NOTE_FREQ[note]
 
+            # Melody note
             subprocess.Popen(
-                ["play", "-n", "synth", str(tempo * 0.9), "sine", str(freq)],
+                ["play", "-n", "synth", str(tempo * 0.9), "sine", str(freq), "vol", f"{vol:.2f}"],
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL
             )
 
+            # Harmony note — 5th scale degree played quietly when prefetch rate is high
+            if prefetch_rate > 0.5:
+                harmony_note = scale[4]
+                harmony_freq = NOTE_FREQ[harmony_note]
+                subprocess.Popen(
+                    ["play", "-n", "synth", str(tempo * 0.9), "sine", str(harmony_freq), "vol", f"{vol * 0.4:.2f}"],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL
+                )
+
             note_index += 1
             time.sleep(tempo)
+
+    def _play_transition_chord(self, vol):
+        # Play root + 3rd + 5th simultaneously to mark a phase transition
+        scale = SCALES.get(self.mode, SCALES[MODE_ADAPTIVE])
+        for degree in [0, 2, 4]:
+            freq = NOTE_FREQ[scale[degree]]
+            subprocess.Popen(
+                ["play", "-n", "synth", "0.5", "sine", str(freq), "vol", f"{vol:.2f}"],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL
+            )
+        time.sleep(0.6)
 
     def _analyze_and_play(self):
         pattern = self._compress_phases()
@@ -235,20 +260,38 @@ class PassthroughRO(Operations):
 
         self.melody_playing = True
 
+        # Confidence controls volume (0.3 = quiet minimum, 1.0 = full)
+        avg_confidence = sum(self.confidence_history) / max(1, len(self.confidence_history))
+        vol = 0.3 + avg_confidence * 0.7
+
+        # Prefetch rate controls chord density
+        prefetch_rate = sum(self.prefetch_history) / max(1, len(self.prefetch_history))
+
+        print(f"[JazzyFS] Avg confidence={avg_confidence:.2f} vol={vol:.2f} prefetch_rate={prefetch_rate:.2f}")
+
         # Tempo encodes workload structure (orthogonal to scale/mode)
         FAST = 0.15   # Sequential access = fast notes
         SLOW = 1.2    # Irregular access = slow notes
 
         segment_duration = TOTAL_PLAY_TIME / len(pattern)
+        prev_phase = None
 
         for phase in pattern:
+            # Play transition chord when phase changes
+            if prev_phase is not None and prev_phase != phase:
+                self._play_transition_chord(vol)
+
             if phase == "sequential":
-                self._play_segment(segment_duration, FAST)
+                self._play_segment(segment_duration, FAST, vol, prefetch_rate)
             else:
-                self._play_segment(segment_duration, SLOW)
+                self._play_segment(segment_duration, SLOW, vol, prefetch_rate)
+
+            prev_phase = phase
 
         # Reset after playback
         self.phase_history.clear()
+        self.confidence_history.clear()
+        self.prefetch_history.clear()
         self.melody_playing = False
 
     def _monitor_completion(self):
@@ -311,6 +354,8 @@ class PassthroughRO(Operations):
         if time.time() - self.last_read_time > 2.0:
             self.trace.clear()
             self.phase_history.clear()
+            self.confidence_history.clear()
+            self.prefetch_history.clear()
 
         os.lseek(fh, offset, os.SEEK_SET)
         actual_offset = os.lseek(fh, 0, os.SEEK_CUR)
@@ -350,6 +395,10 @@ class PassthroughRO(Operations):
             if prefetch:
                 prefetch_offset = actual_offset + len(data)
                 self._prefetch_next(self._full(path), prefetch_offset, self.prefetch_size)
+
+        # Track sonification history
+        self.confidence_history.append(confidence)
+        self.prefetch_history.append(prefetch)
 
         # Log decision for evaluation and reproducibility
         self._log_decision(path, actual_offset, len(data), phase, confidence, prefetch, prefetch_offset)
