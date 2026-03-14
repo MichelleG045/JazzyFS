@@ -31,7 +31,7 @@ WORKLOADS=(
 reset_logs() {
     mkdir -p "$LOG_DIR"
     echo "run_index,run_label,mode,workload,seq,timestamp,path,offset,size" > "$LOG_ACCESS"
-    echo "run_index,run_label,mode,workload,timestamp,fs_mode,path,offset,size,phase,confidence,prefetch,prefetch_offset,prefetch_size,prefetch_depth" > "$LOG_DECISIONS"
+    echo "run_index,run_label,mode,workload,timestamp,path,offset,size,phase,confidence,prefetch,prefetch_offset,prefetch_size,prefetch_depth" > "$LOG_DECISIONS"
 }
 
 mount_jazzyfs() {
