@@ -1,0 +1,173 @@
+#!/usr/bin/env python3
+
+import csv
+import os
+import platform
+from collections import defaultdict
+
+PLATFORM = "apfs" if platform.system() == "Darwin" else "linux"
+RESULTS_DIR = f"results/week10/{PLATFORM}"
+NATIVE_DIR = os.path.join(RESULTS_DIR, "native")
+DEPTH_DIR = os.path.join(RESULTS_DIR, "depth")
+
+DECISION_OUTPUT = os.path.join(RESULTS_DIR, "week10_decision_summary.csv")
+TIMING_OUTPUT = os.path.join(RESULTS_DIR, "week10_timing_summary.csv")
+
+WORKLOADS = [
+    "sequential",
+    "random",
+    "phase_change",
+    "tar_workload",
+    "python_import",
+    "cache_lookup_workload",
+]
+DEPTHS = [1, 2, 4, 8]
+
+DECISION_FIELDNAMES = [
+    "timestamp", "mode", "path", "offset", "size",
+    "phase", "confidence", "prefetch", "prefetch_offset", "prefetch_size", "prefetch_depth"
+]
+
+
+def read_timing_file(filepath):
+    times = defaultdict(list)
+    with open(filepath, newline="") as fp:
+        reader = csv.DictReader(fp)
+        for row in reader:
+            try:
+                value = float(row["real_sec"])
+            except (ValueError, KeyError):
+                continue
+            if value > 0:
+                times[row["workload"]].append(value)
+    return times
+
+
+def summarize_decisions():
+    data = defaultdict(list)
+    run_counts = defaultdict(set)
+
+    for workload in WORKLOADS:
+        workload_dir = os.path.join(RESULTS_DIR, workload)
+        if not os.path.isdir(workload_dir):
+            print(f"[WARN] Missing: {workload_dir}")
+            continue
+
+        for name in sorted(os.listdir(workload_dir)):
+            if not name.startswith(workload):
+                continue
+
+            decisions = os.path.join(workload_dir, name, "decisions.csv")
+            if not os.path.isfile(decisions):
+                continue
+
+            with open(decisions, newline="") as f:
+                first = f.readline()
+                f.seek(0)
+                if first.startswith("timestamp"):
+                    reader = csv.DictReader(f)
+                else:
+                    reader = csv.DictReader(f, fieldnames=DECISION_FIELDNAMES)
+
+                for row in reader:
+                    try:
+                        mode = row["mode"]
+                        prefetch = int(row["prefetch"])
+                        confidence = float(row["confidence"])
+                    except (ValueError, KeyError):
+                        continue
+
+                    data[(workload, mode)].append((prefetch, confidence))
+                    run_counts[(workload, mode)].add(name)
+
+    with open(DECISION_OUTPUT, "w", newline="") as f:
+        writer = csv.writer(f)
+        writer.writerow(["workload", "mode", "runs", "avg_prefetch_rate", "avg_confidence"])
+
+        for (workload, mode), values in sorted(data.items()):
+            avg_prefetch = sum(prefetch for prefetch, _ in values) / len(values)
+            avg_confidence = sum(confidence for _, confidence in values) / len(values)
+            runs = len(run_counts[(workload, mode)])
+            writer.writerow([workload, mode, runs, f"{avg_prefetch:.2f}", f"{avg_confidence:.2f}"])
+
+    print(f"[OK] Saved decision summary to {DECISION_OUTPUT}")
+
+
+def summarize_timing():
+    os.makedirs(NATIVE_DIR, exist_ok=True)
+    os.makedirs(DEPTH_DIR, exist_ok=True)
+
+    timing_data = {}
+    for filename in sorted(os.listdir(NATIVE_DIR)):
+        if not filename.endswith(".csv") or "summary" in filename:
+            continue
+
+        filepath = os.path.join(NATIVE_DIR, filename)
+        if "native" in filename and "jazzyfs" not in filename:
+            mode = "native"
+        elif "none" in filename:
+            mode = "none"
+        elif "baseline" in filename:
+            mode = "baseline"
+        elif "adaptive" in filename:
+            mode = "adaptive"
+        else:
+            continue
+
+        timing_data[mode] = read_timing_file(filepath)
+
+    depth_data = {}
+    for depth in DEPTHS:
+        filepath = os.path.join(DEPTH_DIR, f"jazzyfs_adaptive_depth{depth}_timing.csv")
+        if os.path.exists(filepath):
+            depth_data[depth] = read_timing_file(filepath)
+
+    with open(TIMING_OUTPUT, "w", newline="") as out:
+        writer = csv.writer(out)
+        writer.writerow(["workload", "mode", "avg_real", "min_real", "max_real", "overhead_vs_native"])
+
+        for workload in WORKLOADS:
+            native_times = timing_data.get("native", {}).get(workload)
+            if not native_times:
+                continue
+
+            native_avg = sum(native_times) / len(native_times)
+
+            for mode in ["native", "none", "baseline", "adaptive"]:
+                times = timing_data.get(mode, {}).get(workload)
+                if not times:
+                    continue
+
+                avg = sum(times) / len(times)
+                minimum = min(times)
+                maximum = max(times)
+                if mode == "native":
+                    overhead = "0.0%"
+                else:
+                    overhead = f"{((avg - native_avg) / native_avg) * 100:+.1f}%"
+
+                writer.writerow([workload, mode, f"{avg:.4f}", f"{minimum:.4f}", f"{maximum:.4f}", overhead])
+
+            for depth in DEPTHS:
+                times = depth_data.get(depth, {}).get(workload)
+                if not times:
+                    continue
+
+                avg = sum(times) / len(times)
+                minimum = min(times)
+                maximum = max(times)
+                overhead = f"{((avg - native_avg) / native_avg) * 100:+.1f}%"
+                writer.writerow([workload, f"adaptive_depth{depth}", f"{avg:.4f}", f"{minimum:.4f}", f"{maximum:.4f}", overhead])
+
+    print(f"[OK] Saved timing summary to {TIMING_OUTPUT}")
+
+
+def main():
+    os.makedirs(RESULTS_DIR, exist_ok=True)
+    print(f"[Platform] {PLATFORM}")
+    summarize_decisions()
+    summarize_timing()
+
+
+if __name__ == "__main__":
+    main()
