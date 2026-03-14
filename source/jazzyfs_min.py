@@ -5,6 +5,7 @@ import sys
 import errno
 import time
 import csv
+import random
 import subprocess
 import threading
 from fuse import FUSE, Operations, FuseOSError
@@ -23,9 +24,6 @@ CONFIDENCE_THRESHOLD = 0.7
 # Number of blocks to prefetch ahead (1 = next block only, 2 = next two blocks, etc.)
 PREFETCH_DEPTH = int(os.environ.get("JAZZYFS_PREFETCH_DEPTH", "1"))
 
-# Total duration of musical playback after workload completes
-TOTAL_PLAY_TIME = 8.0
-
 # --------------------------------------------------
 # Evaluation Modes
 # --------------------------------------------------
@@ -38,29 +36,76 @@ MODE_ADAPTIVE = "adaptive" # Confidence-guided prefetching (research contributio
 # Musical Frequencies
 # --------------------------------------------------
 
-NOTE_FREQ = {
-    "C4": 261.63,
-    "D4": 293.66,
-    "E4": 329.63,
-    "F4": 349.23,
-    "G4": 392.00,
-    "A4": 440.00,
-    "B4": 493.88,
-    "C5": 523.25,
-    "Eb4": 311.13,
-    "Ab4": 415.30,
-    "Bb4": 466.16,
+# Scale intervals (semitone steps) per mode
+# none     = Major
+# baseline = Natural Minor
+# adaptive = Harmonic Minor
+SCALE_INTERVALS = {
+    MODE_NONE:     [0, 2, 4, 5, 7, 9, 11],  # Major
+    MODE_BASELINE: [0, 2, 3, 5, 7, 8, 10],  # Natural Minor
+    MODE_ADAPTIVE: [0, 2, 3, 5, 7, 8, 11],  # Harmonic Minor
 }
 
-# Scale encodes prefetching strategy (orthogonal to tempo)
-# none     = Major     (neutral, no strategy)
-# baseline = Natural Minor (always active, can be wasteful)
-# adaptive = Harmonic Minor (selective, nuanced)
-SCALES = {
-    MODE_NONE:     ["C4", "D4", "E4",  "F4", "G4", "A4",  "B4",  "C5"],
-    MODE_BASELINE: ["C4", "D4", "Eb4", "F4", "G4", "Ab4", "Bb4", "C5"],
-    MODE_ADAPTIVE: ["C4", "D4", "Eb4", "F4", "G4", "Ab4", "B4",  "C5"],
+# Background chord progressions — one triad per cycle (4 cycles total)
+# Semitone offsets from the scale root for each chord tone [root, third, fifth]
+CHORD_PROGRESSIONS = {
+    MODE_NONE: [           # Major: I → IV → V → I
+        # Scale degrees per group: [1,2,3] [4,5,6] [7] [8=root octave]
+        # IV placed on notes 4-6 so scale degree 4 (F in C) is the chord root — no tritone clash
+        [0,  4,  7],       # I   major   (tonic)
+        [5,  9, 12],       # IV  major   (subdominant — root matches scale deg 4)
+        [7, 11, 14],       # V   major   (dominant — scale deg 7 is chord 3rd)
+        [0,  4,  7],       # I   major   (tonic resolution)
+    ],
+    MODE_BASELINE: [       # Natural Minor: i → iv → v → i
+        # iv placed on notes 4-6 so scale degree 4 matches chord root — no clash
+        [0,  3,  7],       # i   minor   (tonic)
+        [5,  8, 12],       # iv  minor   (subdominant — root matches scale deg 4)
+        [7, 10, 14],       # v   minor   (dominant)
+        [0,  3,  7],       # i   minor   (tonic resolution)
+    ],
+    MODE_ADAPTIVE: [       # Harmonic Minor: i → iv → V → i  (textbook cadence)
+        # Same alignment — iv catches scale deg 4, major V catches raised 7th
+        [0,  3,  7],       # i   minor   (tonic)
+        [5,  8, 12],       # iv  minor   (subdominant — root matches scale deg 4)
+        [7, 11, 14],       # V   major   (dominant — raised 7th is chord 3rd)
+        [0,  3,  7],       # i   minor   (tonic resolution — lands on last note)
+    ],
 }
+
+# Chromatic root notes starting at C3, one semitone apart
+# Used to select the current key as the melody climbs
+_CHROMATIC_ROOTS_HZ = [
+    130.81,  # C3
+    138.59,  # C#3
+    146.83,  # D3
+    155.56,  # Eb3
+    164.81,  # E3
+    174.61,  # F3
+    185.00,  # F#3
+    196.00,  # G3
+    207.65,  # Ab3
+    220.00,  # A3
+    233.08,  # Bb3
+    246.94,  # B3
+    261.63,  # C4
+    277.18,  # C#4
+    293.66,  # D4
+    311.13,  # Eb4
+    329.63,  # E4
+    349.23,  # F4
+    369.99,  # F#4
+    392.00,  # G4
+    415.30,  # Ab4
+    440.00,  # A4
+    466.16,  # Bb4
+    493.88,  # B4
+    523.25,  # C5
+]
+
+def _build_scale_hz(root_hz, intervals):
+    """Return list of frequencies for a scale given a root frequency and semitone intervals."""
+    return [root_hz * (2 ** (i / 12)) for i in intervals]
 
 # --------------------------------------------------
 # Filesystem
@@ -117,6 +162,8 @@ class PassthroughRO(Operations):
         self.confidence_history = []
         self.prefetch_history = []
         self.last_read_time = time.time()
+        # Persistent note position — moves up or down based on confidence across sessions
+        self.note_index = 0  # start at root of scale
         self.melody_playing = False
 
         print(f"[JazzyFS] Mode           = {self.mode}")
@@ -209,47 +256,86 @@ class PassthroughRO(Operations):
 
         return compressed
 
-    def _play_segment(self, duration, tempo, vol, prefetch_rate):
-        # Play a segment of the scale at the given tempo, volume, and chord density
-        scale = SCALES.get(self.mode, SCALES[MODE_ADAPTIVE])
-        note_index = 0
-        start = time.time()
+    def _play_segment(self, tempo, vol, avg_confidence, root_idx=0):
+        # 3 cycles × 7 (or 8) notes each.
+        # Each cycle launches a sustained background chord, then runs the melody over it.
+        # Chord progression per mode: Major=I→IV→V, NatMinor=i→iv→v, HarmMinor=i→III+→V
+        intervals = SCALE_INTERVALS.get(self.mode, SCALE_INTERVALS[MODE_ADAPTIVE])
+        root_hz = _CHROMATIC_ROOTS_HZ[root_idx]
+        scale_hz = _build_scale_hz(root_hz, intervals)
+        n = len(scale_hz)  # 7
+        ascending = avg_confidence >= 0.5
+        n_notes = n + 1  # 8 notes either direction — last note always lands on root octave
 
-        while time.time() - start < duration:
-            note = scale[note_index % len(scale)]
-            freq = NOTE_FREQ[note]
+        progression = CHORD_PROGRESSIONS.get(self.mode, CHORD_PROGRESSIONS[MODE_ADAPTIVE])
+        n_cycles    = len(progression)  # 4
+        slow        = tempo >= 0.5
 
-            # Melody note
+        def _melody_note(i):
+            if ascending:
+                return scale_hz[0] * 2 if i == n else scale_hz[i]
+            else:
+                return scale_hz[0] * 2 if i == 0 else scale_hz[n - i]
+
+        def _play_chord(semitones, duration, chord_vol=0.30, fade_in=0.05, fade_out_dur=None):
+            if fade_out_dur is None:
+                fade_out_dur = round(min(duration * 0.4, tempo * 1.5), 3)
+            # Raise chords one octave — keeps voicing bright and above the low melody range
+            tones = [root_hz * 2 * (2 ** (s / 12)) for s in semitones]
+            cmd = ["play", "-q", "-n", "synth", str(duration)]
+            for f in tones:
+                cmd += ["sine", str(round(f, 2))]
+            cmd += ["vol", f"{chord_vol:.2f}", "fade", "t", str(fade_in), str(duration), str(fade_out_dur)]
+            subprocess.Popen(cmd, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+        def _play_note(i):
+            dur      = tempo * 0.85
+            fade_out = tempo * 0.15
             subprocess.Popen(
-                ["play", "-n", "synth", str(tempo * 0.9), "sine", str(freq), "vol", f"{vol:.2f}"],
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL
+                ["play", "-q", "-n", "synth", str(dur), "triangle", str(_melody_note(i)),
+                 "vol", f"{vol:.2f}", "fade", "t", "0", str(dur), str(fade_out)],
+                stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
             )
-
-            # Harmony note — 5th scale degree played quietly when prefetch rate is high
-            if prefetch_rate > 0.5:
-                harmony_note = scale[4]
-                harmony_freq = NOTE_FREQ[harmony_note]
-                subprocess.Popen(
-                    ["play", "-n", "synth", str(tempo * 0.9), "sine", str(harmony_freq), "vol", f"{vol * 0.4:.2f}"],
-                    stdout=subprocess.DEVNULL,
-                    stderr=subprocess.DEVNULL
-                )
-
-            note_index += 1
             time.sleep(tempo)
 
-    def _play_transition_chord(self, vol):
-        # Play root + 3rd + 5th simultaneously to mark a phase transition
-        scale = SCALES.get(self.mode, SCALES[MODE_ADAPTIVE])
-        for degree in [0, 2, 4]:
-            freq = NOTE_FREQ[scale[degree]]
-            subprocess.Popen(
-                ["play", "-n", "synth", "0.5", "sine", str(freq), "vol", f"{vol:.2f}"],
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL
-            )
-        time.sleep(0.6)
+        if not slow:
+            # ── FAST ──────────────────────────────────────────────────────────────
+            # Chord N fires on note 1 of cycle N (cycle 1→chord 1, ..., cycle 4→chord 4).
+            for cycle_idx in range(n_cycles):
+                chord_dur = round(tempo * n_notes, 3)
+                _play_chord(progression[cycle_idx], chord_dur)
+                for i in range(n_notes):
+                    _play_note(i)
+
+        else:
+            # ── SLOW ──────────────────────────────────────────────────────────────
+            # Within each cycle: chord 1@note1, chord 2@note4, chord 3@note7, chord 4@note8.
+            # Groups: notes [0-2]=chord A, [3-5]=chord B, [6]=chord C, [7]=chord D (resolution).
+            SLOW_GROUPS = [3, 3, 1, 1]  # note boundaries: 1, 4, 7, 8
+
+            for cycle_idx in range(n_cycles):
+                note_i = 0
+                for group_idx, group_size in enumerate(SLOW_GROUPS):
+                    chord_idx  = (cycle_idx * len(SLOW_GROUPS) + group_idx) % n_cycles
+                    is_cadence = (cycle_idx == n_cycles - 1 and group_idx == len(SLOW_GROUPS) - 1)
+
+                    if is_cadence:
+                        # Resolution chord fires simultaneously with the last note, rings longer
+                        _play_chord(progression[chord_idx],
+                                    duration=round(tempo * 2.0, 3),
+                                    chord_vol=0.35,
+                                    fade_in=0.0,
+                                    fade_out_dur=round(tempo * 1.0, 3))
+                    else:
+                        _play_chord(progression[chord_idx], round(tempo * group_size, 3))
+
+                    for j in range(group_size):
+                        _play_note(note_i + j)
+
+                    note_i += group_size
+
+        # Wait for the last note to finish before returning
+        time.sleep(tempo * 0.85)
 
     def _analyze_and_play(self):
         pattern = self._compress_phases()
@@ -259,34 +345,39 @@ class PassthroughRO(Operations):
             return
 
         self.melody_playing = True
+        self.note_index = 0  # reset to root for each new playback session
 
-        # Confidence controls volume (0.3 = quiet minimum, 1.0 = full)
+        vol = 0.7  # two triangle waves sum — keep below 1.0 to avoid clipping
+
         avg_confidence = sum(self.confidence_history) / max(1, len(self.confidence_history))
-        vol = 0.3 + avg_confidence * 0.7
-
-        # Prefetch rate controls chord density
         prefetch_rate = sum(self.prefetch_history) / max(1, len(self.prefetch_history))
 
-        print(f"[JazzyFS] Avg confidence={avg_confidence:.2f} vol={vol:.2f} prefetch_rate={prefetch_rate:.2f}")
+        direction = "ASCENDING" if avg_confidence >= 0.5 else "DESCENDING"
+        print(f"[JazzyFS] avg_confidence={avg_confidence:.2f} → {direction}")
+        print(f"[JazzyFS] prefetch_rate={prefetch_rate:.2f}")
+
+        # Root note randomly chosen from the 7 natural notes (C D E F G A B)
+        _NATURAL_INDICES = [0, 2, 4, 5, 7, 9, 11]   # chromatic indices in _CHROMATIC_ROOTS_HZ
+        _NATURAL_NAMES   = ["C3","D3","E3","F3","G3","A3","B3"]
+        root_bucket = random.randrange(7)
+        root_idx  = _NATURAL_INDICES[root_bucket]
+        root_name = _NATURAL_NAMES[root_bucket]
+        scale_name = {MODE_NONE: "Major", MODE_BASELINE: "Natural Minor", MODE_ADAPTIVE: "Harmonic Minor"}.get(self.mode, "")
+        print(f"[JazzyFS] Root: {root_name}  Scale: {scale_name}  Mode: {self.mode}")
+        print(f"[JazzyFS] Starting in 5 seconds...")
+
+        time.sleep(5)
 
         # Tempo encodes workload structure (orthogonal to scale/mode)
         FAST = 0.15   # Sequential access = fast notes
         SLOW = 1.2    # Irregular access = slow notes
 
-        segment_duration = TOTAL_PLAY_TIME / len(pattern)
-        prev_phase = None
-
         for phase in pattern:
-            # Play transition chord when phase changes
-            if prev_phase is not None and prev_phase != phase:
-                self._play_transition_chord(vol)
+            tempo = FAST if phase == "sequential" else SLOW
+            print(f"[JazzyFS] ▶ phase={phase}  tempo={tempo}s/note  {direction}")
+            self._play_segment(tempo, vol, avg_confidence, root_idx)
 
-            if phase == "sequential":
-                self._play_segment(segment_duration, FAST, vol, prefetch_rate)
-            else:
-                self._play_segment(segment_duration, SLOW, vol, prefetch_rate)
-
-            prev_phase = phase
+        print("[JazzyFS] Playback complete")
 
         # Reset after playback
         self.phase_history.clear()
