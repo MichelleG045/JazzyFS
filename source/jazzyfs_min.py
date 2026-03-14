@@ -144,7 +144,7 @@ class PassthroughRO(Operations):
         if write_decision_header:
             self._decision_writer.writerow([
                 "run_index", "run_label", "mode", "workload",
-                "timestamp", "fs_mode", "path", "offset", "size",
+                "timestamp", "path", "offset", "size",
                 "phase", "confidence", "prefetch", "prefetch_offset", "prefetch_size", "prefetch_depth"
             ])
 
@@ -200,7 +200,7 @@ class PassthroughRO(Operations):
     def _log_decision(self, path, offset, size, phase, confidence, prefetch, prefetch_offset):
         self._decision_writer.writerow([
                 self.run_index, self.run_label, self.mode, self.workload_name,
-                time.time(), self.mode, path, offset, size,
+                time.time(), path, offset, size,
                 phase, f"{confidence:.4f}", int(prefetch),
                 prefetch_offset if prefetch else "",
                 self.prefetch_size if prefetch else "",
