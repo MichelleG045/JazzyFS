@@ -172,6 +172,7 @@ class PassthroughRO(Operations):
         # Persistent note position — moves up or down based on confidence across sessions
         self.note_index = 0  # start at root of scale
         self.melody_playing = False
+        self._state_lock = threading.Lock()
 
         print(f"[JazzyFS] Mode           = {self.mode}")
         if self.run_label:
@@ -353,19 +354,21 @@ class PassthroughRO(Operations):
         time.sleep(tempo * 0.85)
 
     def _analyze_and_play(self):
-        pattern = self._compress_phases()
+        with self._state_lock:
+            pattern = self._compress_phases()
+            if not pattern:
+                return
+            self.melody_playing = True
+            self.note_index = 0  # reset to root for each new playback session
+            avg_confidence = sum(self.confidence_history) / max(1, len(self.confidence_history))
+            prefetch_rate = sum(self.prefetch_history) / max(1, len(self.prefetch_history))
+            self.phase_history.clear()
+            self.confidence_history.clear()
+            self.prefetch_history.clear()
+
         print(f"[JazzyFS] Phase pattern: {pattern}")
 
-        if not pattern:
-            return
-
-        self.melody_playing = True
-        self.note_index = 0  # reset to root for each new playback session
-
         vol = 0.7  # two triangle waves sum — keep below 1.0 to avoid clipping
-
-        avg_confidence = sum(self.confidence_history) / max(1, len(self.confidence_history))
-        prefetch_rate = sum(self.prefetch_history) / max(1, len(self.prefetch_history))
 
         direction = "ASCENDING" if avg_confidence >= 0.5 else "DESCENDING"
         print(f"[JazzyFS] avg_confidence={avg_confidence:.2f} → {direction}")
@@ -394,21 +397,22 @@ class PassthroughRO(Operations):
 
         print("[JazzyFS] Playback complete")
 
-        # Reset after playback
-        self.phase_history.clear()
-        self.confidence_history.clear()
-        self.prefetch_history.clear()
-        self.melody_playing = False
+        with self._state_lock:
+            self.melody_playing = False
 
     def _monitor_completion(self):
         # Background thread: trigger playback when reads stop for 1 second
         while True:
             time.sleep(0.2)
 
-            if (time.time() - self.last_read_time > 1.0 and
+            with self._state_lock:
+                should_play = (
+                    time.time() - self.last_read_time > 1.0 and
                     self.phase_history and
-                    not self.melody_playing):
+                    not self.melody_playing
+                )
 
+            if should_play:
                 self._analyze_and_play()
 
     # --------------------------------------------------
@@ -454,15 +458,6 @@ class PassthroughRO(Operations):
         return os.open(full, os.O_RDONLY)
 
     def read(self, path, size, offset, fh):
-        # Reset trace if more than 2 seconds since last read
-        # This handles workload boundaries without clearing on every open()
-        # Keeps trace intact across rapid dd calls within the same workload
-        if time.time() - self.last_read_time > 2.0:
-            self.trace.clear()
-            self.phase_history.clear()
-            self.confidence_history.clear()
-            self.prefetch_history.clear()
-
         os.lseek(fh, offset, os.SEEK_SET)
         actual_offset = os.lseek(fh, 0, os.SEEK_CUR)
         data = os.read(fh, size)
@@ -470,16 +465,26 @@ class PassthroughRO(Operations):
         # Log raw access
         self._log_read(path, actual_offset, len(data))
 
-        # Update shared trace
-        event = {"t": time.time(), "path": path, "offset": actual_offset, "size": len(data)}
-        self.trace.append(event)
+        with self._state_lock:
+            # Reset trace if more than 2 seconds since last read
+            # This handles workload boundaries without clearing on every open()
+            # Keeps trace intact across rapid dd calls within the same workload
+            if time.time() - self.last_read_time > 2.0:
+                self.trace.clear()
+                self.phase_history.clear()
+                self.confidence_history.clear()
+                self.prefetch_history.clear()
 
-        # Update sonification state
-        sonification_phase = self._detect_phase()
-        if sonification_phase != "unknown":
-            self.phase_history.append(sonification_phase)
+            # Update shared trace
+            event = {"t": time.time(), "path": path, "offset": actual_offset, "size": len(data)}
+            self.trace.append(event)
 
-        self.last_read_time = time.time()
+            # Update sonification state
+            sonification_phase = self._detect_phase()
+            if sonification_phase != "unknown":
+                self.phase_history.append(sonification_phase)
+
+            self.last_read_time = time.time()
 
         # Prefetch decision uses the same phase and confidence
         phase = sonification_phase
@@ -503,8 +508,9 @@ class PassthroughRO(Operations):
                 self._prefetch_next(self._full(path), prefetch_offset, self.prefetch_size)
 
         # Track sonification history
-        self.confidence_history.append(confidence)
-        self.prefetch_history.append(prefetch)
+        with self._state_lock:
+            self.confidence_history.append(confidence)
+            self.prefetch_history.append(prefetch)
 
         # Log decision for evaluation and reproducibility
         self._log_decision(path, actual_offset, len(data), phase, confidence, prefetch, prefetch_offset)
