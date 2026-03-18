@@ -1,0 +1,16 @@
+run_index,run_label,mode,workload,timestamp,path,offset,size,phase,confidence,prefetch,prefetch_offset,prefetch_size,prefetch_depth
+274,274_adaptive_random_run14,adaptive,random,1773855174.5709877,/big.txt,20480,4096,unknown,0.0000,0,,,1
+274,274_adaptive_random_run14,adaptive,random,1773855174.573657,/big.txt,491520,4096,irregular,0.0000,0,,,1
+274,274_adaptive_random_run14,adaptive,random,1773855174.575288,/big.txt,172032,4096,irregular,0.0000,0,,,1
+274,274_adaptive_random_run14,adaptive,random,1773855174.576985,/big.txt,1228800,4096,irregular,0.0000,0,,,1
+274,274_adaptive_random_run14,adaptive,random,1773855174.5785844,/big.txt,69632,4096,irregular,0.0000,0,,,1
+274,274_adaptive_random_run14,adaptive,random,1773855174.5803046,/big.txt,1024000,4096,irregular,0.0000,0,,,1
+274,274_adaptive_random_run14,adaptive,random,1773855174.582116,/big.txt,360448,4096,irregular,0.0000,0,,,1
+274,274_adaptive_random_run14,adaptive,random,1773855174.5840814,/big.txt,778240,4096,irregular,0.0000,0,,,1
+274,274_adaptive_random_run14,adaptive,random,1773855174.585951,/big.txt,245760,4096,irregular,0.0000,0,,,1
+274,274_adaptive_random_run14,adaptive,random,1773855174.588106,/big.txt,40960,4096,irregular,0.0000,0,,,1
+274,274_adaptive_random_run14,adaptive,random,1773855174.5906174,/big.txt,1126400,4096,irregular,0.0000,0,,,1
+274,274_adaptive_random_run14,adaptive,random,1773855174.592876,/big.txt,135168,4096,irregular,0.0000,0,,,1
+274,274_adaptive_random_run14,adaptive,random,1773855174.5950334,/big.txt,655360,4096,irregular,0.0000,0,,,1
+274,274_adaptive_random_run14,adaptive,random,1773855174.5972435,/big.txt,860160,4096,irregular,0.0000,0,,,1
+274,274_adaptive_random_run14,adaptive,random,1773855174.5995,/big.txt,389120,4096,irregular,0.0000,0,,,1
