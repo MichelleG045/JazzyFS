@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Week 10: Full experiment runner — works on Linux (ext4) and macOS (APFS).
-# Auto-detects platform and writes to results/week10/linux/ or results/week10/apfs/.
-# Produces: results/week10/{platform}/{workload}/{workload}_{mode}_run{n}/access.csv + decisions.csv
+# Full experiment runner — works on Linux (ext4) and macOS (APFS).
+# Auto-detects platform and writes to results/linux/ or results/apfs/.
+# Produces: results/{platform}/{workload}/{workload}_{mode}_run{n}/access.csv + decisions.csv
 #
-# Usage: bash workloads/week10/run_experiments.sh [source_dir] [mount_point]
-# Example: bash workloads/week10/run_experiments.sh source_data mount
+# Usage: bash Experiments/run_experiments.sh [source_dir] [mount_point]
+# Example: bash Experiments/run_experiments.sh source_data mount
 #
 # Prerequisites:
 #   1. Run workloads/setup/setup_test_data.sh first to create source_data/
@@ -38,14 +38,22 @@ _workload_script() {
 }
 
 _reset_logs() {
-    echo "seq,timestamp,path,offset,size" > "$LOG_ACCESS"
-    echo "timestamp,mode,path,offset,size,phase,confidence,prefetch,prefetch_offset,prefetch_size,prefetch_depth" > "$LOG_DECISIONS"
+    echo "run_index,run_label,mode,workload,seq,timestamp,path,offset,size" > "$LOG_ACCESS"
+    echo "run_index,run_label,mode,workload,timestamp,path,offset,size,phase,confidence,prefetch,prefetch_offset,prefetch_size,prefetch_depth" > "$LOG_DECISIONS"
 }
 
 _mount_jazzyfs() {
     local mode=$1
+    local run_index=$2
+    local workload=$3
+    local run_label=$4
     mkdir -p "$MOUNT_DIR"
-    JAZZYFS_MODE=$mode JAZZYFS_SOUND=0 python3 "$JAZZYFS" "$SOURCE_DIR" "$MOUNT_DIR" &
+    JAZZYFS_MODE="$mode" \
+        JAZZYFS_SOUND=0 \
+        JAZZYFS_RUN_INDEX="$run_index" \
+        JAZZYFS_RUN_LABEL="$run_label" \
+        JAZZYFS_WORKLOAD="$workload" \
+        python3 "$JAZZYFS" "$SOURCE_DIR" "$MOUNT_DIR" &
     JAZZYFS_PID=$!
     sleep 2
     echo "[JazzyFS] Mounted (PID=$JAZZYFS_PID, mode=$mode)"
@@ -57,7 +65,7 @@ _unmount_jazzyfs() {
     else
         fusermount -u "$MOUNT_DIR" 2>/dev/null || umount "$MOUNT_DIR" 2>/dev/null || true
     fi
-    [[ -n "$JAZZYFS_PID" ]] && wait $JAZZYFS_PID 2>/dev/null || true
+    [[ -n "$JAZZYFS_PID" ]] && wait "$JAZZYFS_PID" 2>/dev/null || true
     echo "[JazzyFS] Unmounted"
 }
 
@@ -65,38 +73,40 @@ trap '_unmount_jazzyfs' EXIT
 
 echo "[Platform] $PLATFORM"
 
+run_index=0
+
 for mode in "${MODES[@]}"; do
     echo ""
     echo "=============================="
     echo " Mode: $mode"
     echo "=============================="
 
-    _mount_jazzyfs "$mode"
-
     for workload in "${WORKLOADS[@]}"; do
         for run in $(seq 1 $RUNS); do
-            OUT_DIR="results/week10/${PLATFORM}/${workload}/${workload}_${mode}_run${run}"
+            run_index=$((run_index + 1))
+            run_label="$(printf '%03d_%s_%s_run%02d' "$run_index" "$mode" "$workload" "$run")"
+            OUT_DIR="results/${PLATFORM}/${workload}/${workload}_${mode}_run${run}"
             mkdir -p "$OUT_DIR"
 
             _reset_logs
+            _mount_jazzyfs "$mode" "$run_index" "$workload" "$run_label"
 
-            echo "  [$mode] $workload run $run..."
+            echo "  [$mode] $workload run $run (label=$run_label)..."
             bash "$(_workload_script "$workload")"
 
             cp "$LOG_ACCESS"    "$OUT_DIR/access.csv"
             cp "$LOG_DECISIONS" "$OUT_DIR/decisions.csv"
             echo "    Saved to $OUT_DIR"
 
-            sleep 2
+            _unmount_jazzyfs
+            JAZZYFS_PID=
+            sleep 1
         done
     done
-
-    _unmount_jazzyfs
-    JAZZYFS_PID=
 done
 
 trap - EXIT
 
 echo ""
-echo "[DONE] Week 10 experiments complete."
-echo "Results in results/week10/${PLATFORM}/"
+echo "[DONE] Experiments complete."
+echo "Results in results/${PLATFORM}/"
