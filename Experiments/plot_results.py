@@ -8,6 +8,7 @@ Reads:  results/{platform}/timing_summary.csv
 Outputs PNG figures to results/{platform}/figures/
 """
 
+import argparse
 import csv
 import os
 import platform
@@ -22,13 +23,18 @@ except ImportError:
     print("ERROR: matplotlib and numpy required. Run: pip install matplotlib numpy")
     sys.exit(1)
 
-PLATFORM = "apfs" if platform.system() == "Darwin" else "linux"
+_parser = argparse.ArgumentParser(add_help=False)
+_parser.add_argument("--platform", default=None)
+_args, _ = _parser.parse_known_args()
+
+PLATFORM = _args.platform or ("apfs" if platform.system() == "Darwin" else "linux")
 RESULTS_DIR = f"results/{PLATFORM}"
 FIGURES_DIR = os.path.join(RESULTS_DIR, "figures")
 
 WORKLOADS = [
     "sequential", "random", "phase_change",
     "tar_workload", "python_import", "cache_lookup_workload",
+    "concurrent",
 ]
 MODES  = ["none", "baseline", "adaptive"]
 DEPTHS = [1, 2, 4, 8]
@@ -48,6 +54,7 @@ SHORT = {
     "tar_workload":          "tar",
     "python_import":         "pyimport",
     "cache_lookup_workload": "cache",
+    "concurrent":            "conc",
 }
 
 

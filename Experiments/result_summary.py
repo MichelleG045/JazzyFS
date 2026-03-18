@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+import argparse
 import csv
 import math
 import os
@@ -7,7 +8,11 @@ import platform
 import statistics
 from collections import defaultdict
 
-PLATFORM = "apfs" if platform.system() == "Darwin" else "linux"
+_parser = argparse.ArgumentParser(add_help=False)
+_parser.add_argument("--platform", default=None)
+_args, _ = _parser.parse_known_args()
+
+PLATFORM = _args.platform or ("apfs" if platform.system() == "Darwin" else "linux")
 RESULTS_DIR = f"results/{PLATFORM}"
 NATIVE_DIR = os.path.join(RESULTS_DIR, "native")
 DEPTH_DIR = os.path.join(RESULTS_DIR, "depth")
@@ -35,6 +40,7 @@ WORKLOADS = [
     "tar_workload",
     "python_import",
     "cache_lookup_workload",
+    "concurrent",
 ]
 DEPTHS = [1, 2, 4, 8]
 
