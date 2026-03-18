@@ -2,6 +2,9 @@ workload,mode,runs,avg_prefetch_rate,avg_confidence,std_confidence
 cache_lookup_workload,adaptive,20,0.00,0.0000,0.0000
 cache_lookup_workload,baseline,20,1.00,0.0000,0.0000
 cache_lookup_workload,none,20,0.00,0.0000,0.0000
+concurrent,adaptive,20,0.00,0.0000,0.0000
+concurrent,baseline,20,1.00,0.0000,0.0000
+concurrent,none,20,0.00,0.0000,0.0000
 phase_change,adaptive,20,0.98,0.9834,0.1247
 phase_change,baseline,20,1.00,0.9834,0.1247
 phase_change,none,20,0.00,0.9834,0.1247
