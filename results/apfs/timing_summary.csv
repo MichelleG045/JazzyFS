@@ -47,3 +47,11 @@ cache_lookup_workload,adaptive_depth1,20,2.4761,0.0147,0.0065,2.4600,2.5250,+0.8
 cache_lookup_workload,adaptive_depth2,20,2.6920,0.0347,0.0152,2.6230,2.7560,+9.5%
 cache_lookup_workload,adaptive_depth4,20,2.4754,0.0157,0.0069,2.4560,2.5090,+0.7%
 cache_lookup_workload,adaptive_depth8,20,2.4687,0.0116,0.0051,2.4490,2.4850,+0.4%
+concurrent,native,20,0.0186,0.0040,0.0017,0.0080,0.0220,0.0%
+concurrent,none,20,0.0198,0.0044,0.0019,0.0100,0.0240,+6.7%
+concurrent,baseline,20,0.0211,0.0029,0.0012,0.0110,0.0240,+13.7%
+concurrent,adaptive,20,0.0195,0.0047,0.0020,0.0100,0.0280,+4.6%
+concurrent,adaptive_depth1,20,0.0208,0.0062,0.0027,0.0100,0.0410,+11.8%
+concurrent,adaptive_depth2,20,0.0202,0.0029,0.0013,0.0110,0.0240,+8.6%
+concurrent,adaptive_depth4,20,0.0202,0.0049,0.0022,0.0110,0.0350,+8.3%
+concurrent,adaptive_depth8,20,0.0196,0.0038,0.0016,0.0100,0.0230,+5.1%
