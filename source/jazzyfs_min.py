@@ -272,7 +272,7 @@ class PassthroughRO(Operations):
         return compressed
 
     def _play_segment(self, tempo, vol, avg_confidence, root_idx=0):
-        # 3 cycles × 7 (or 8) notes each.
+        # 4 cycles × 8 notes each.
         # Each cycle launches a sustained background chord, then runs the melody over it.
         # Chord progression per mode: Major=I→IV→V, NatMinor=i→iv→v, HarmMinor=i→III+→V
         intervals = SCALE_INTERVALS.get(self.mode, SCALE_INTERVALS[MODE_ADAPTIVE])

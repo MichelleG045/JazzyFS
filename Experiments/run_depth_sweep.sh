@@ -2,9 +2,9 @@
 set -euo pipefail
 
 # Week 10: Prefetch depth sweep across all 6 workloads. Works on Linux and macOS.
-# Auto-detects platform and writes to results/week10/linux/ or results/week10/apfs/.
+# Auto-detects platform and writes to results/linux/ or results/apfs/.
 # Mounts and remounts JazzyFS for each depth so JAZZYFS_PREFETCH_DEPTH takes effect.
-# Usage: bash workloads/week10/run_depth_sweep.sh [source_dir] [mount_point]
+# Usage: bash Experiments/run_depth_sweep.sh [source_dir] [mount_point]
 
 SOURCE_DIR="${1:-source_data}"
 MOUNT_DIR="${2:-mount}"
@@ -47,12 +47,12 @@ _unmount() {
 
 trap '_unmount' EXIT
 
-mkdir -p "results/week10/${PLATFORM}/depth"
+mkdir -p "results/${PLATFORM}/depth"
 
 echo "[Platform] $PLATFORM"
 
 for depth in "${DEPTHS[@]}"; do
-    OUTPUT="results/week10/${PLATFORM}/depth/jazzyfs_adaptive_depth${depth}_timing.csv"
+    OUTPUT="results/${PLATFORM}/depth/jazzyfs_adaptive_depth${depth}_timing.csv"
     echo "workload,run,real_sec,user_sec,sys_sec" > "$OUTPUT"
 
     _mount "$depth"

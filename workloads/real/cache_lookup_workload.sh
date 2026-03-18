@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-set -eu
+set -euo pipefail
 
 # Cache lookup workload: simulates a database/cache reading random records by offset
 # Real-world analogue: key-value store, LRU cache, or B-tree index lookups

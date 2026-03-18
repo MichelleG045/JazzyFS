@@ -2,16 +2,16 @@
 set -euo pipefail
 
 # Week 10: Native timing — no JazzyFS, direct filesystem. Works on Linux and macOS.
-# Auto-detects platform and writes to results/week10/linux/ or results/week10/apfs/.
-# Usage: bash workloads/week10/run_native_timing.sh [source_dir] [mount_point]
+# Auto-detects platform and writes to results/linux/ or results/apfs/.
+# Usage: bash Experiments/run_native_timing.sh [source_dir] [mount_point]
 
 SOURCE_DIR="${1:-source_data}"
 MOUNT_DIR="${2:-mount}"
 
 if [[ "$(uname)" == "Darwin" ]]; then PLATFORM="apfs"; else PLATFORM="linux"; fi
 
-OUTPUT="results/week10/${PLATFORM}/native/native_timing.csv"
-mkdir -p "results/week10/${PLATFORM}/native"
+OUTPUT="results/${PLATFORM}/native/native_timing.csv"
+mkdir -p "results/${PLATFORM}/native"
 
 # Workload scripts read from mount/. For native timing, symlink mount → source_data
 # so they access files directly without going through JazzyFS.

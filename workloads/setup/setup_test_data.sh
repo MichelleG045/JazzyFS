@@ -13,11 +13,13 @@ echo "  Created big.txt (100 MB)"
 
 echo "[2/3] Creating tar archive..."
 mkdir -p /tmp/jazzyfs_archive_src
+trap 'rm -rf /tmp/jazzyfs_archive_src' EXIT
 for i in $(seq 1 100); do
     dd if=/dev/urandom bs=4096 count=4 of="/tmp/jazzyfs_archive_src/file_${i}.bin" status=none
 done
 tar -cf "$SOURCE_DIR/archive.tar" -C /tmp/jazzyfs_archive_src .
 rm -rf /tmp/jazzyfs_archive_src
+trap - EXIT
 echo "  Created archive.tar with 100 files (4 x 4KB each)"
 
 echo "[3/3] Creating Python module files..."
