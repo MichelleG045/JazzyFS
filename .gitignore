@@ -2,4 +2,6 @@ venv/
 __pycache__/
 *.pyc
 mnt/
+mount/
+logs/
 .DS_Store
