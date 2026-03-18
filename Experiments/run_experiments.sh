@@ -22,7 +22,7 @@ LOG_DECISIONS="logs/decisions.csv"
 if [[ "$(uname)" == "Darwin" ]]; then PLATFORM="apfs"; else PLATFORM="linux"; fi
 
 MODES=("none" "baseline" "adaptive")
-WORKLOADS=("sequential" "random" "phase_change" "tar_workload" "python_import" "cache_lookup_workload")
+WORKLOADS=("sequential" "random" "phase_change" "tar_workload" "python_import" "cache_lookup_workload" "concurrent")
 RUNS=20
 JAZZYFS_PID=
 
