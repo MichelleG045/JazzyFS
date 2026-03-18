@@ -1,5 +1,6 @@
 workload,expected_phase,runs,correct,accuracy
 cache_lookup_workload,irregular,60,60,1.0000
+concurrent,irregular,60,60,1.0000
 phase_change,mixed,60,60,1.0000
 python_import,irregular,60,60,1.0000
 random,irregular,60,60,1.0000
