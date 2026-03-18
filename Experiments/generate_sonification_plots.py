@@ -226,37 +226,42 @@ def save_wav(audio, path):
 # Plotting
 # --------------------------------------------------
 
-def _plot_one(ax_wave, ax_spec, audio, title):
+def _plot_one(ax_wave, ax_spec, audio, title,
+              title_fs=11, label_fs=10, tick_fs=9):
     t = np.linspace(0, len(audio) / SAMPLE_RATE, len(audio))
 
-    ax_wave.plot(t, audio, linewidth=0.4, color="#2c7bb6")
-    ax_wave.set_ylabel("Amp", fontsize=7)
-    ax_wave.set_title(title, fontsize=8, pad=3)
+    ax_wave.plot(t, audio, linewidth=0.5, color="#2c7bb6")
+    ax_wave.set_ylabel("Amplitude", fontsize=label_fs)
+    ax_wave.set_title(title, fontsize=title_fs, pad=4, fontweight="bold")
     ax_wave.set_xlim(0, t[-1])
-    ax_wave.tick_params(labelsize=6)
+    ax_wave.tick_params(labelsize=tick_fs)
     ax_wave.set_xticks([])
+    ax_wave.spines["top"].set_visible(False)
+    ax_wave.spines["right"].set_visible(False)
 
     ax_spec.specgram(audio, Fs=SAMPLE_RATE, cmap="plasma",
                      NFFT=2048, noverlap=1024, scale="dB")
     ax_spec.set_ylim(0, 1200)
-    ax_spec.set_ylabel("Hz", fontsize=7)
-    ax_spec.set_xlabel("Time (s)", fontsize=7)
-    ax_spec.tick_params(labelsize=6)
+    ax_spec.set_ylabel("Frequency (Hz)", fontsize=label_fs)
+    ax_spec.set_xlabel("Time (s)", fontsize=label_fs)
+    ax_spec.tick_params(labelsize=tick_fs)
+    ax_spec.spines["top"].set_visible(False)
+    ax_spec.spines["right"].set_visible(False)
 
 
 def plot_individual(audio, mode, workload, path):
-    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(8, 4),
+    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 5),
                                     gridspec_kw={"height_ratios": [1, 2]})
     title = f"{SHORT[workload]}  |  Mode: {MODE_LABELS[mode]}"
-    _plot_one(ax1, ax2, audio, title)
+    _plot_one(ax1, ax2, audio, title, title_fs=13, label_fs=11, tick_fs=10)
 
     conf  = WORKLOAD_PARAMS[workload]["confidence"]
     phase = WORKLOAD_PARAMS[workload]["phase"]
     direction = "ascending" if conf >= 0.5 else "descending"
     fig.text(0.01, 0.01,
-             f"phase={phase}  confidence={conf:.4f}  melody={direction}",
-             fontsize=7, color="gray")
-    plt.tight_layout()
+             f"phase={phase}   confidence={conf:.4f}   melody={direction}",
+             fontsize=9, color="#555555")
+    plt.tight_layout(rect=[0, 0.03, 1, 1])
     os.makedirs(os.path.dirname(path), exist_ok=True)
     plt.savefig(path, dpi=150, bbox_inches="tight")
     plt.close()
@@ -267,34 +272,45 @@ def plot_grid(all_audio):
     n_rows = len(WORKLOADS)
     n_cols = len(MODES)
 
-    fig = plt.figure(figsize=(18, 4 * n_rows))
+    fig = plt.figure(figsize=(26, 7 * n_rows))
     fig.suptitle(
         "JazzyFS Sonification — Waveform & Spectrogram\n"
         "Rows: workloads   |   Columns: prefetch modes",
-        fontsize=13, y=1.005
+        fontsize=18, fontweight="bold", y=1.002
     )
 
-    outer = fig.add_gridspec(n_rows, n_cols, hspace=0.55, wspace=0.3)
+    outer = fig.add_gridspec(n_rows, n_cols, hspace=0.65, wspace=0.35)
 
     for row, workload in enumerate(WORKLOADS):
         for col, mode in enumerate(MODES):
             audio = all_audio[(mode, workload)]
             inner = outer[row, col].subgridspec(2, 1,
                                                  height_ratios=[1, 2],
-                                                 hspace=0.15)
+                                                 hspace=0.18)
             ax_w = fig.add_subplot(inner[0])
             ax_s = fig.add_subplot(inner[1])
 
-            title = f"{SHORT[workload]} / {mode}"
-            _plot_one(ax_w, ax_s, audio, title)
+            conf      = WORKLOAD_PARAMS[workload]["confidence"]
+            direction = "↑" if conf >= 0.5 else "↓"
+            title     = f"{SHORT[workload]} / {mode}  {direction} conf={conf:.2f}"
+            _plot_one(ax_w, ax_s, audio, title,
+                      title_fs=11, label_fs=9, tick_fs=8)
 
+            # Row label on left edge
             if col == 0:
-                ax_w.set_ylabel(f"{SHORT[workload]}\nAmp", fontsize=7)
+                ax_w.set_ylabel(f"Amplitude", fontsize=9)
+                ax_w.annotate(SHORT[workload], xy=(-0.18, 0.5),
+                              xycoords="axes fraction", fontsize=11,
+                              fontweight="bold", ha="center", va="center",
+                              rotation=90)
 
+    # Column headers
     for col, mode in enumerate(MODES):
-        ax = fig.axes[col * 2]
-        ax.set_title(f"{MODE_LABELS[mode]}\n{ax.get_title()}",
-                     fontsize=8, pad=3)
+        first_ax = fig.axes[col * 4]  # 2 axes per cell × col offset
+        first_ax.set_title(
+            f"— {MODE_LABELS[mode]} —\n{first_ax.get_title()}",
+            fontsize=12, fontweight="bold", pad=5
+        )
 
     path = os.path.join(OUT_DIR, "sonification_grid.png")
     plt.savefig(path, dpi=150, bbox_inches="tight")
