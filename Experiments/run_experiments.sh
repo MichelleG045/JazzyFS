@@ -85,7 +85,7 @@ for mode in "${MODES[@]}"; do
         for run in $(seq 1 $RUNS); do
             run_index=$((run_index + 1))
             run_label="$(printf '%03d_%s_%s_run%02d' "$run_index" "$mode" "$workload" "$run")"
-            OUT_DIR="results/${PLATFORM}/${workload}/${workload}_${mode}_run${run}"
+            OUT_DIR="results/${PLATFORM}/${workload}/${mode}/run${run}"
             mkdir -p "$OUT_DIR"
 
             _reset_logs
