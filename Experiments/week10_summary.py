@@ -1,12 +1,14 @@
 #!/usr/bin/env python3
 
 import csv
+import math
 import os
 import platform
+import statistics
 from collections import defaultdict
 
 PLATFORM = "apfs" if platform.system() == "Darwin" else "linux"
-RESULTS_DIR = f"results/week10/{PLATFORM}"
+RESULTS_DIR = f"results/{PLATFORM}"
 NATIVE_DIR = os.path.join(RESULTS_DIR, "native")
 DEPTH_DIR = os.path.join(RESULTS_DIR, "depth")
 
@@ -23,11 +25,6 @@ WORKLOADS = [
 ]
 DEPTHS = [1, 2, 4, 8]
 
-DECISION_FIELDNAMES = [
-    "timestamp", "mode", "path", "offset", "size",
-    "phase", "confidence", "prefetch", "prefetch_offset", "prefetch_size", "prefetch_depth"
-]
-
 
 def read_timing_file(filepath):
     times = defaultdict(list)
@@ -41,6 +38,13 @@ def read_timing_file(filepath):
             if value > 0:
                 times[row["workload"]].append(value)
     return times
+
+
+def ci95(values):
+    n = len(values)
+    if n < 2:
+        return 0.0
+    return 1.96 * statistics.stdev(values) / math.sqrt(n)
 
 
 def summarize_decisions():
@@ -62,12 +66,9 @@ def summarize_decisions():
                 continue
 
             with open(decisions, newline="") as f:
-                first = f.readline()
+                first = f.readline().strip()
                 f.seek(0)
-                if first.startswith("timestamp"):
-                    reader = csv.DictReader(f)
-                else:
-                    reader = csv.DictReader(f, fieldnames=DECISION_FIELDNAMES)
+                reader = csv.DictReader(f)
 
                 for row in reader:
                     try:
@@ -82,13 +83,21 @@ def summarize_decisions():
 
     with open(DECISION_OUTPUT, "w", newline="") as f:
         writer = csv.writer(f)
-        writer.writerow(["workload", "mode", "runs", "avg_prefetch_rate", "avg_confidence"])
+        writer.writerow([
+            "workload", "mode", "runs",
+            "avg_prefetch_rate", "avg_confidence", "std_confidence"
+        ])
 
         for (workload, mode), values in sorted(data.items()):
-            avg_prefetch = sum(prefetch for prefetch, _ in values) / len(values)
-            avg_confidence = sum(confidence for _, confidence in values) / len(values)
+            avg_prefetch = sum(p for p, _ in values) / len(values)
+            confidences = [c for _, c in values]
+            avg_confidence = sum(confidences) / len(confidences)
+            std_confidence = statistics.stdev(confidences) if len(confidences) > 1 else 0.0
             runs = len(run_counts[(workload, mode)])
-            writer.writerow([workload, mode, runs, f"{avg_prefetch:.2f}", f"{avg_confidence:.2f}"])
+            writer.writerow([
+                workload, mode, runs,
+                f"{avg_prefetch:.2f}", f"{avg_confidence:.4f}", f"{std_confidence:.4f}"
+            ])
 
     print(f"[OK] Saved decision summary to {DECISION_OUTPUT}")
 
@@ -124,7 +133,12 @@ def summarize_timing():
 
     with open(TIMING_OUTPUT, "w", newline="") as out:
         writer = csv.writer(out)
-        writer.writerow(["workload", "mode", "avg_real", "min_real", "max_real", "overhead_vs_native"])
+        writer.writerow([
+            "workload", "mode", "n",
+            "avg_real", "std_real", "ci95_real",
+            "min_real", "max_real",
+            "overhead_vs_native"
+        ])
 
         for workload in WORKLOADS:
             native_times = timing_data.get("native", {}).get(workload)
@@ -138,26 +152,38 @@ def summarize_timing():
                 if not times:
                     continue
 
-                avg = sum(times) / len(times)
+                n = len(times)
+                avg = sum(times) / n
+                std = statistics.stdev(times) if n > 1 else 0.0
+                ci = ci95(times)
                 minimum = min(times)
                 maximum = max(times)
-                if mode == "native":
-                    overhead = "0.0%"
-                else:
-                    overhead = f"{((avg - native_avg) / native_avg) * 100:+.1f}%"
+                overhead = "0.0%" if mode == "native" else f"{((avg - native_avg) / native_avg) * 100:+.1f}%"
 
-                writer.writerow([workload, mode, f"{avg:.4f}", f"{minimum:.4f}", f"{maximum:.4f}", overhead])
+                writer.writerow([
+                    workload, mode, n,
+                    f"{avg:.4f}", f"{std:.4f}", f"{ci:.4f}",
+                    f"{minimum:.4f}", f"{maximum:.4f}", overhead
+                ])
 
             for depth in DEPTHS:
                 times = depth_data.get(depth, {}).get(workload)
                 if not times:
                     continue
 
-                avg = sum(times) / len(times)
+                n = len(times)
+                avg = sum(times) / n
+                std = statistics.stdev(times) if n > 1 else 0.0
+                ci = ci95(times)
                 minimum = min(times)
                 maximum = max(times)
                 overhead = f"{((avg - native_avg) / native_avg) * 100:+.1f}%"
-                writer.writerow([workload, f"adaptive_depth{depth}", f"{avg:.4f}", f"{minimum:.4f}", f"{maximum:.4f}", overhead])
+
+                writer.writerow([
+                    workload, f"adaptive_depth{depth}", n,
+                    f"{avg:.4f}", f"{std:.4f}", f"{ci:.4f}",
+                    f"{minimum:.4f}", f"{maximum:.4f}", overhead
+                ])
 
     print(f"[OK] Saved timing summary to {TIMING_OUTPUT}")
 
