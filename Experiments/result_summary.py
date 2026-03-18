@@ -12,8 +12,21 @@ RESULTS_DIR = f"results/{PLATFORM}"
 NATIVE_DIR = os.path.join(RESULTS_DIR, "native")
 DEPTH_DIR = os.path.join(RESULTS_DIR, "depth")
 
-DECISION_OUTPUT = os.path.join(RESULTS_DIR, "week10_decision_summary.csv")
-TIMING_OUTPUT = os.path.join(RESULTS_DIR, "week10_timing_summary.csv")
+DECISION_OUTPUT  = os.path.join(RESULTS_DIR, "decision_summary.csv")
+TIMING_OUTPUT    = os.path.join(RESULTS_DIR, "timing_summary.csv")
+ACCURACY_OUTPUT  = os.path.join(RESULTS_DIR, "phase_accuracy_summary.csv")
+
+# Ground-truth expected phase for each workload
+# Used to validate that the phase detector classifies correctly
+EXPECTED_PHASE = {
+    "sequential":            "sequential",
+    "random":                "irregular",
+    "phase_change":          "mixed",       # contains both phases
+    "tar_workload":          "sequential",
+    "python_import":         "irregular",
+    "cache_lookup_workload": "irregular",
+    "concurrent":            "irregular",
+}
 
 WORKLOADS = [
     "sequential",
@@ -188,11 +201,65 @@ def summarize_timing():
     print(f"[OK] Saved timing summary to {TIMING_OUTPUT}")
 
 
+def summarize_phase_accuracy():
+    """Compare detected phases against known ground-truth expected phases per workload."""
+    results = defaultdict(lambda: {"correct": 0, "total": 0})
+
+    for workload, expected in EXPECTED_PHASE.items():
+        workload_dir = os.path.join(RESULTS_DIR, workload)
+        if not os.path.isdir(workload_dir):
+            continue
+
+        for name in sorted(os.listdir(workload_dir)):
+            if not name.startswith(workload):
+                continue
+
+            decisions = os.path.join(workload_dir, name, "decisions.csv")
+            if not os.path.isfile(decisions):
+                continue
+
+            phases_seen = set()
+            with open(decisions, newline="") as f:
+                for row in csv.DictReader(f):
+                    phase = row.get("phase", "").strip()
+                    if phase in ("sequential", "irregular"):
+                        phases_seen.add(phase)
+
+            if expected == "mixed":
+                correct = len(phases_seen) == 2
+            elif expected == "sequential":
+                correct = phases_seen == {"sequential"} or (
+                    "sequential" in phases_seen and "irregular" not in phases_seen
+                )
+            else:  # irregular
+                correct = "sequential" not in phases_seen or "irregular" in phases_seen
+
+            results[workload]["correct"] += int(correct)
+            results[workload]["total"]   += 1
+
+    with open(ACCURACY_OUTPUT, "w", newline="") as f:
+        writer = csv.writer(f)
+        writer.writerow(["workload", "expected_phase", "runs", "correct", "accuracy"])
+        for workload in sorted(results):
+            r = results[workload]
+            acc = r["correct"] / r["total"] if r["total"] > 0 else 0.0
+            writer.writerow([
+                workload,
+                EXPECTED_PHASE.get(workload, "unknown"),
+                r["total"],
+                r["correct"],
+                f"{acc:.4f}",
+            ])
+
+    print(f"[OK] Saved phase accuracy summary to {ACCURACY_OUTPUT}")
+
+
 def main():
     os.makedirs(RESULTS_DIR, exist_ok=True)
     print(f"[Platform] {PLATFORM}")
     summarize_decisions()
     summarize_timing()
+    summarize_phase_accuracy()
 
 
 if __name__ == "__main__":

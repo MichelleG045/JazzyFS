@@ -2,14 +2,14 @@
 set -euo pipefail
 
 # Week 10: JazzyFS timing for a given mode. Works on Linux and macOS.
-# Auto-detects platform and writes to results/week10/linux/ or results/week10/apfs/.
+# Auto-detects platform and writes to results/linux/ or results/apfs/.
 # Mounts JazzyFS in the specified mode, runs all workloads, then unmounts.
-# Usage: bash workloads/week10/run_jazzyfs_timing.sh <mode> [source_dir] [mount_point]
-# Example: bash workloads/week10/run_jazzyfs_timing.sh adaptive
+# Usage: bash Experiments/run_jazzyfs_timing.sh <mode> [source_dir] [mount_point]
+# Example: bash Experiments/run_jazzyfs_timing.sh adaptive
 
 if [ -z "${1:-}" ]; then
-    echo "Usage: bash workloads/week10/run_jazzyfs_timing.sh <mode> [source_dir] [mount_point]"
-    echo "Example: bash workloads/week10/run_jazzyfs_timing.sh adaptive"
+    echo "Usage: bash Experiments/run_jazzyfs_timing.sh <mode> [source_dir] [mount_point]"
+    echo "Example: bash Experiments/run_jazzyfs_timing.sh adaptive"
     exit 1
 fi
 
@@ -20,8 +20,8 @@ JAZZYFS="source/jazzyfs_min.py"
 
 if [[ "$(uname)" == "Darwin" ]]; then PLATFORM="apfs"; else PLATFORM="linux"; fi
 
-OUTPUT="results/week10/${PLATFORM}/native/jazzyfs_${MODE}_timing.csv"
-mkdir -p "results/week10/${PLATFORM}/native"
+OUTPUT="results/${PLATFORM}/native/jazzyfs_${MODE}_timing.csv"
+mkdir -p "results/${PLATFORM}/native"
 
 WORKLOADS=("sequential" "random" "phase_change" "tar_workload" "python_import" "cache_lookup_workload")
 
