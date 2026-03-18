@@ -70,29 +70,29 @@ def summarize_decisions():
             print(f"[WARN] Missing: {workload_dir}")
             continue
 
-        for name in sorted(os.listdir(workload_dir)):
-            if not name.startswith(workload):
+        for mode_name in sorted(os.listdir(workload_dir)):
+            mode_dir = os.path.join(workload_dir, mode_name)
+            if not os.path.isdir(mode_dir):
                 continue
 
-            decisions = os.path.join(workload_dir, name, "decisions.csv")
-            if not os.path.isfile(decisions):
-                continue
+            for run_name in sorted(os.listdir(mode_dir)):
+                decisions = os.path.join(mode_dir, run_name, "decisions.csv")
+                if not os.path.isfile(decisions):
+                    continue
 
-            with open(decisions, newline="") as f:
-                first = f.readline().strip()
-                f.seek(0)
-                reader = csv.DictReader(f)
+                with open(decisions, newline="") as f:
+                    reader = csv.DictReader(f)
 
-                for row in reader:
-                    try:
-                        mode = row["mode"]
-                        prefetch = int(row["prefetch"])
-                        confidence = float(row["confidence"])
-                    except (ValueError, KeyError):
-                        continue
+                    for row in reader:
+                        try:
+                            mode = row["mode"]
+                            prefetch = int(row["prefetch"])
+                            confidence = float(row["confidence"])
+                        except (ValueError, KeyError):
+                            continue
 
-                    data[(workload, mode)].append((prefetch, confidence))
-                    run_counts[(workload, mode)].add(name)
+                        data[(workload, mode)].append((prefetch, confidence))
+                        run_counts[(workload, mode)].add(run_name)
 
     with open(DECISION_OUTPUT, "w", newline="") as f:
         writer = csv.writer(f)
@@ -210,32 +210,34 @@ def summarize_phase_accuracy():
         if not os.path.isdir(workload_dir):
             continue
 
-        for name in sorted(os.listdir(workload_dir)):
-            if not name.startswith(workload):
+        for mode_name in sorted(os.listdir(workload_dir)):
+            mode_dir = os.path.join(workload_dir, mode_name)
+            if not os.path.isdir(mode_dir):
                 continue
 
-            decisions = os.path.join(workload_dir, name, "decisions.csv")
-            if not os.path.isfile(decisions):
-                continue
+            for run_name in sorted(os.listdir(mode_dir)):
+                decisions = os.path.join(mode_dir, run_name, "decisions.csv")
+                if not os.path.isfile(decisions):
+                    continue
 
-            phases_seen = set()
-            with open(decisions, newline="") as f:
-                for row in csv.DictReader(f):
-                    phase = row.get("phase", "").strip()
-                    if phase in ("sequential", "irregular"):
-                        phases_seen.add(phase)
+                phases_seen = set()
+                with open(decisions, newline="") as f:
+                    for row in csv.DictReader(f):
+                        phase = row.get("phase", "").strip()
+                        if phase in ("sequential", "irregular"):
+                            phases_seen.add(phase)
 
-            if expected == "mixed":
-                correct = len(phases_seen) == 2
-            elif expected == "sequential":
-                correct = phases_seen == {"sequential"} or (
-                    "sequential" in phases_seen and "irregular" not in phases_seen
-                )
-            else:  # irregular
-                correct = "sequential" not in phases_seen or "irregular" in phases_seen
+                if expected == "mixed":
+                    correct = len(phases_seen) == 2
+                elif expected == "sequential":
+                    correct = phases_seen == {"sequential"} or (
+                        "sequential" in phases_seen and "irregular" not in phases_seen
+                    )
+                else:  # irregular
+                    correct = "sequential" not in phases_seen or "irregular" in phases_seen
 
-            results[workload]["correct"] += int(correct)
-            results[workload]["total"]   += 1
+                results[workload]["correct"] += int(correct)
+                results[workload]["total"]   += 1
 
     with open(ACCURACY_OUTPUT, "w", newline="") as f:
         writer = csv.writer(f)
