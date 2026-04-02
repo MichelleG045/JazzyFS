@@ -23,7 +23,7 @@ jobs:
         run: pip install ruff
 
       - name: Lint with ruff
-        run: ruff check source/jazzyfs_min.py
+        run: ruff check source/ Experiments/
 
       - name: Check jazzyfs_min.py syntax
         run: python3 -m py_compile source/jazzyfs_min.py
