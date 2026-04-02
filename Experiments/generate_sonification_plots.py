@@ -298,7 +298,7 @@ def plot_grid(all_audio):
 
             # Row label on left edge
             if col == 0:
-                ax_w.set_ylabel(f"Amplitude", fontsize=9)
+                ax_w.set_ylabel("Amplitude", fontsize=9)
                 ax_w.annotate(SHORT[workload], xy=(-0.18, 0.5),
                               xycoords="axes fraction", fontsize=11,
                               fontweight="bold", ha="center", va="center",
