@@ -382,7 +382,7 @@ class PassthroughRO(Operations):
         root_name = _NATURAL_NAMES[root_bucket]
         scale_name = {MODE_NONE: "Major", MODE_BASELINE: "Natural Minor", MODE_ADAPTIVE: "Harmonic Minor"}.get(self.mode, "")
         print(f"[JazzyFS] Root: {root_name}  Scale: {scale_name}  Mode: {self.mode}")
-        print(f"[JazzyFS] Starting in 5 seconds...")
+        print("[JazzyFS] Starting in 5 seconds...")
 
         time.sleep(5)
 
@@ -534,8 +534,8 @@ def main():
     os.makedirs(mount, exist_ok=True)
 
     print(f"[JazzyFS] Mounting {source} at {mount} (read-only)")
-    print(f"[JazzyFS] Set JAZZYFS_MODE to: none | baseline | adaptive")
-    print(f"[JazzyFS] Set JAZZYFS_SOUND=1 to enable sonification")
+    print("[JazzyFS] Set JAZZYFS_MODE to: none | baseline | adaptive")
+    print("[JazzyFS] Set JAZZYFS_SOUND=1 to enable sonification")
 
     FUSE(
         PassthroughRO(source),
