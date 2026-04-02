@@ -1,0 +1,35 @@
+name: JazzyFS CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Check jazzyfs_min.py syntax
+        run: python3 -m py_compile source/jazzyfs_min.py
+
+      - name: Check result_summary.py syntax
+        run: python3 -m py_compile Experiments/result_summary.py
+
+      - name: Check plot_results.py syntax
+        run: python3 -m py_compile Experiments/plot_results.py
+
+      - name: Run result summary against saved results (APFS)
+        run: python3 Experiments/result_summary.py --platform apfs
+
+      - name: Run result summary against saved results (Linux)
+        run: python3 Experiments/result_summary.py --platform linux
