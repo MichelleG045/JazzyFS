@@ -1,0 +1,775 @@
+\documentclass[12pt]{report}
+
+% Packages
+\usepackage[
+    left=1.5in,
+    right=1.25in,
+    top=1.25in,
+    bottom=1.25in
+]{geometry}
+
+\usepackage{setspace}          % line spacing
+\usepackage{graphicx}          % figures
+\usepackage{amsmath}           % math
+\usepackage{hyperref}          % clickable refs
+\usepackage{float}             % figure placement [H]
+\usepackage{booktabs}          % clean tables
+\usepackage{caption}           % caption formatting
+\usepackage{times}             % Times New Roman font
+\usepackage{fancyhdr}          % header/footer control
+\usepackage{emptypage}         % blank pages have no header/footer
+\usepackage{listings}          % code listings
+\usepackage{xcolor}            % colors for listings
+
+% Code listing style
+\lstset{
+    basicstyle=\small\ttfamily,
+    breaklines=true,
+    frame=single,
+    numbers=left,
+    numberstyle=\tiny,
+    keywordstyle=\bfseries,
+    commentstyle=\itshape\color{gray},
+}
+
+% Page numbering style
+\pagestyle{fancy}
+\fancyhf{}
+\fancyfoot[C]{\thepage}
+\renewcommand{\headrulewidth}{0pt}
+
+% Double spacing (required by UCSC)
+\doublespacing
+
+\begin{document}
+
+% ============================================================
+% FRONT MATTER
+% ============================================================
+
+% Title page (counted as page i, no number displayed)
+\begin{titlepage}
+    \centering
+
+    {\large UNIVERSITY OF CALIFORNIA}\\[0.1in]
+    {\large SANTA CRUZ}
+
+    \vspace{0.5in}
+
+    {\large \textbf{JAZZYFS: ADAPTIVE PREFETCHING WITH LIGHTWEIGHT\\
+    FEEDBACK-DIRECTED SEQUENTIAL PREDICTION\\
+    AND POST-WORKLOAD SONIFICATION}}
+
+    \vspace{0.4in}
+
+    {\normalsize A thesis submitted in partial satisfaction of the\\
+    requirements for the degree of}
+
+    \vspace{0.3in}
+
+    {\large \textbf{MASTER OF SCIENCE}}
+
+    \vspace{0.2in}
+
+    {\normalsize in}
+
+    \vspace{0.2in}
+
+    {\large \textbf{COMPUTER SCIENCE AND ENGINEERING}}
+
+    \vspace{0.4in}
+
+    {\normalsize by}
+
+    \vspace{0.2in}
+
+    {\large \textbf{Michelle Gurovith}}
+
+    \vspace{0.4in}
+
+    {\normalsize June 2026}
+
+    \vspace{0.6in}
+
+    \begin{flushleft}
+    The Thesis of Michelle Gurovith is approved:\\[0.3in]
+    \rule{3in}{0.4pt}\\
+    Professor Scott Brandt, Chair\\[0.3in]
+    \rule{3in}{0.4pt}\\
+    Professor Andi Quinn\\[0.3in]
+    \rule{3in}{0.4pt}\\
+    Professor Lise Getoor\\[0.3in]
+    \rule{3in}{0.4pt}\\
+    Professor Heiner Litz\\[0.5in]
+    \rule{3in}{0.4pt}\\
+    Peter Biehl\\
+    Vice Provost and Dean of Graduate Studies
+    \end{flushleft}
+
+\end{titlepage}
+
+% Copyright page (counted as page ii, no number displayed)
+\thispagestyle{empty}
+\vspace*{\fill}
+\begin{center}
+    Copyright \copyright\ 2026 by Michelle Gurovith\\
+    All rights reserved.
+\end{center}
+\vspace*{\fill}
+\newpage
+
+% Front matter uses Roman numerals starting at iii
+\pagenumbering{roman}
+\setcounter{page}{3}
+
+% Table of Contents
+\tableofcontents
+\newpage
+
+% List of Figures
+\listoffigures
+\newpage
+
+% List of Tables
+\listoftables
+\newpage
+
+% Abstract
+\chapter*{Abstract}
+\addcontentsline{toc}{chapter}{Abstract}
+
+Modern filesystems use heuristic-based prefetching, which uses the same
+read-ahead method no matter what the workload is. This is fine for
+sequential access, but it uses up cache space and bandwidth in random or
+mixed workloads.
+
+JazzyFS is a FUSE-based filesystem that employs adaptive prefetching with
+phase detection and confidence scoring. It looks at access patterns while
+the program is running and only prefetches when it is sure that the workload
+is sequential. A sonification feature turns system behavior into sound,
+offering users a post-workload audio summary of system behavior.
+
+We tested JazzyFS on seven workloads on both Linux with ext4 and macOS with
+APFS, including a prefetch depth sweep over depths 1, 2, 4, and 8. In every experimental run, the phase detector identified the expected
+access pattern type, a run-level consistency check across all seven
+workloads. Deeper prefetch depths did
+not improve performance and added more overhead. The FUSE layer itself, not
+the adaptive prefetching technique, is the main source of overhead.
+
+\newpage
+
+% Acknowledgments
+\chapter*{Acknowledgments}
+\addcontentsline{toc}{chapter}{Acknowledgments}
+
+I want to thank my advisor and committee for all the help and advice they
+gave me during this project. I appreciate the constructive criticism and
+support that helped me choose the direction of my research and write this
+paper.
+
+\newpage
+
+% ============================================================
+% MAIN MATTER
+% ============================================================
+\pagenumbering{arabic}
+\setcounter{page}{1}
+
+% ============================================================
+% Chapter 1: Introduction
+% ============================================================
+\chapter{Introduction}
+\label{ch:introduction}
+
+There is always a latency gap between storage and the processor in modern
+computing systems. The CPU has to wait for storage to respond when it wants
+data that is not currently in memory, which stops execution. Prefetching
+fixes this by putting data into memory before it is needed. But modern
+filesystems use heuristic-based prefetching, which uses the same fixed
+read-ahead rule no matter what the workload is. This works for workloads
+that run in order, but it wastes bandwidth and cache space for workloads
+that run in random or mixed order. For instance, a web server may visit
+several unrelated files in no predictable sequence, which is common in
+modern systems. Heuristic prefetching keeps requesting data even when the
+pattern is irregular, wasting I/O resources and filling the cache with data
+that is never used, because it cannot observe or adapt to how the workload
+is behaving.
+
+\section{Motivation}
+
+The main goal of this thesis is to find out how well an adaptive prefetcher
+can discover workload I/O patterns, put them in categories, and make
+decisions about turning prefetching on or off. For example, if a filesystem
+can identify that the requests are contiguous, it can classify the workload
+as sequential and enable prefetching. If, on the other hand, the reads come
+in at non-contiguous offsets, the system may not be as sure that this is a
+sequential workload.
+
+JazzyFS does not use a fixed rule like a heuristic prefetcher. Instead, it
+looks at the workload and figures out which pattern it most likely belongs
+to. If the workload has a sequential pattern, it acts like a normal
+prefetcher to improve I/O efficiency. If the filesystem sees that the
+workload pattern is random, it does not prefetch in order to save resources.
+
+Another motivation is observability. Engineers typically need to use
+debugging tools to figure out what prefetching is doing. It can take a lot
+of effort to understand what the prefetcher was doing using traditional
+tools like logs. JazzyFS solves this by playing back a summary of system behavior as audio
+after each workload completes, giving users another way to review what
+happened beyond just looking at data logs.
+
+\section{JazzyFS}
+
+To deal with these problems, this thesis presents JazzyFS, a read-only
+user-space filesystem that is built on top of Filesystem in Userspace
+(FUSE). JazzyFS mounts an existing directory and acts as a filter for every
+file read operation. It looks at the recent access history for each read,
+uses that information to figure out the access pattern, and then decides
+whether or not to prefetch. There are three ways that JazzyFS can prefetch:
+a Null Prefetcher, a One Block Lookahead prefetcher, and a
+Feedback-Directed Sequential Prefetcher, which only prefetches when the
+sliding-window confidence score shows that the access pattern is sequential.
+There is also a sonification feature that turns system behavior into music,
+which is another way to observe how the system works.
+
+\section{Experimental Evaluation}
+
+We test JazzyFS on two platforms, Linux with ext4 and macOS with APFS,
+using seven different workloads. There are twenty repetitions for each
+condition, which means each platform has 420 experimental runs across the
+three prefetching modes. A native timing baseline collected without FUSE
+usage gives a benchmark with no overhead. A separate prefetch depth sweep
+across $\{1, 2, 4, 8\}$ blocks adds more runs, bringing the total to
+1{,}120 runs per platform across all conditions.
+
+The workloads cover a variety of access patterns:
+
+\begin{itemize}
+    \item \textbf{Sequential}: reading a 100~MB file in a straight line.
+    \item \textbf{Random}: deterministic seeks at offsets that are not next
+    to each other.
+    \item \textbf{Phase Change}: sequential access transitioning to random
+    and back again.
+    \item \textbf{Concurrent}: twenty random reads at the same time.
+    \item \textbf{Tar Extraction}: taking 100 small files out of an archive.
+    \item \textbf{Python Import}: reading 200 small Python module files.
+    \item \textbf{Cache Lookup}: 200 page-aligned random seeks with 10~ms
+    delays between reads.
+\end{itemize}
+
+Metrics collected include execution time, overhead versus native, prefetch
+rate, prediction confidence, phase detection accuracy, and a prefetch depth
+sweep across $\{1, 2, 4, 8\}$ blocks.
+
+\section{Research Questions}
+
+This thesis is organized around five research questions that help explore
+the behavior of lightweight adaptive prefetching in a real filesystem.
+
+\begin{enumerate}
+
+    \item \textbf{Broader Systems Perspective.} What do the observed results
+    suggest about the broader applicability of lightweight adaptive techniques
+    to systems resource management?
+
+    \item \textbf{Adaptation Dynamics.} How quickly can a feedback-directed
+    prefetcher adapt when access patterns change abruptly?
+
+    \item \textbf{Cost vs.\ Benefit.} Are there scenarios where simple
+    heuristics are consistently better than adaptive approaches, and vice
+    versa?
+
+    \item \textbf{Confidence and Performance.} How does prediction confidence
+    correlate with actual performance outcomes under different workloads?
+
+    \item \textbf{Observability Through Sound.} Does mapping access phase,
+    confidence, and prefetching mode to musical parameters produce an auditory
+    signal that is meaningful and distinguishable,
+    enabling operators to monitor system behavior without consulting logs or
+    dashboards?
+
+\end{enumerate}
+
+\section{Key Findings}
+
+\begin{itemize}
+    \item In every experimental run on both platforms, the phase detector
+    produced the expected access pattern type. This is a run-level
+    consistency check: it confirms the detector tracks dominant patterns
+    correctly, not that every individual read is correctly classified.
+    \item Confidence correctly tracks workload structure: $\approx 0.999$ for
+    sequential workloads, 0.000 for purely irregular workloads
+    (random, concurrent, cache lookup), and $\approx 0.500$ for mixed-pattern
+    workloads such as Python module import.
+    \item The adaptive algorithm matches OBL on the sequential workload
+    (prefetch rate 1.00) and tar extraction (prefetch rate $\geq 0.97$ across
+    platforms), and matches the null prefetcher on purely irregular workloads
+    (prefetch rate 0.00).
+    \item FUSE overhead dominates algorithm cost: even the null prefetcher
+    adds 180\% overhead on macOS and 388\% on Linux for sequential workloads.
+    \item Prefetch depth greater than one provides no throughput benefit and
+    consistently increases overhead on sequential workloads.
+\end{itemize}
+
+\section{Contributions}
+
+\begin{enumerate}
+    \item Design and implementation of JazzyFS, a FUSE-based adaptive
+    filesystem with cross-platform support (Linux ext4 and macOS APFS) and
+    full experimental instrumentation.
+    \item A lightweight feedback-directed sequential prefetching mechanism
+    requiring no training data, implemented as a sliding-window confidence
+    scorer.
+    \item A reproducible evaluation framework with seven workloads, three
+    primary modes, a prefetch depth sweep across four depths, and a native
+    baseline, yielding 2{,}240 total experimental runs across both platforms.
+    \item A novel sonification system mapping access phase, confidence, and
+    mode to a post-workload musical summary.
+    \item Quantitative analysis of trade-offs between heuristic and adaptive
+    prefetching across diverse workload types on two real filesystems.
+\end{enumerate}
+
+
+% ============================================================
+% Chapter 2: Background
+% ============================================================
+\chapter{Background}
+\label{ch:background}
+
+This chapter provides the technical background necessary to understand
+JazzyFS.
+Section~\ref{sec:bg-fs} reviews filesystem architecture.
+Section~\ref{sec:bg-fuse} introduces FUSE.
+Section~\ref{sec:bg-prefetch} surveys classical prefetching techniques.
+Section~\ref{sec:bg-feedback} reviews feedback-directed prefetching.
+Section~\ref{sec:bg-obs} covers observability and sonification.
+
+\section{Filesystem Architecture}
+\label{sec:bg-fs}
+
+A filesystem is the software layer that organizes data on storage and
+presents it to applications through a common interface. From an
+application's perspective, a file is just a named sequence of bytes. The
+filesystem translates operations like open, read, write, seek, and close
+into physical reads and writes on the storage device.
+
+An important part of the storage stack is the \emph{page cache}. The kernel
+keeps recently accessed file data in memory so that repeated reads can be
+served from memory instead of storage. When the requested data is already in
+cache, no I/O is needed. When it is not, the kernel issues a physical read.
+This reduces latency significantly for files that are accessed often or
+read sequentially.
+
+\subsection{Access Patterns and I/O Performance}
+
+Access patterns in filesystem workloads span a diverse spectrum from
+sequential to random. In a purely sequential workload, each read request
+begins exactly where the previous request ended. On the other hand, random
+access patterns are offsets that are not contiguous. While these are two
+widely seen workloads, pure sequential and random workloads are rare; real
+workloads are often a mix of the two. As a result, a properly functioning
+filesystem must be able to handle a wide range of workloads without
+assigning mixed workloads to a specific pure pattern.
+
+\subsection{ext4: Linux's Default Filesystem}
+
+ext4 is the default filesystem on most Linux systems and is used for
+JazzyFS's Linux evaluation. It is a journaled filesystem, which means it
+logs changes before writing them, allowing recovery after a crash. The
+Linux kernel includes a built-in read-ahead mechanism that loads data ahead
+of sequential reads. When a workload reads sequentially, the kernel detects
+this and issues extra reads in advance, hiding storage latency.
+
+JazzyFS uses the \texttt{direct\_io=True} FUSE option, which bypasses the
+page cache. This means every read goes through the FUSE callback and cannot
+be served from memory. Because of this, the native baseline is always faster
+than any FUSE mode: native reads get kernel read-ahead and caching, while
+JazzyFS reads pay the full FUSE round-trip cost every time. This is important when reading the overhead numbers in the evaluation.
+
+\subsection{APFS: Apple's Flash-Optimized Filesystem}
+
+APFS (Apple File System) is the default filesystem on macOS and is used for
+JazzyFS's macOS evaluation. It was designed for solid-state storage and
+replaced the older HFS+ filesystem. Unlike spinning disks, solid-state drives
+have low random-access latency, so APFS does not optimize specifically for
+sequential reads. APFS also uses a copy-on-write design, meaning changes
+create new data blocks rather than overwriting existing ones, which enables
+atomic snapshots and fast file cloning.
+
+On macOS, FUSE support is provided by macFUSE, a third-party kernel
+extension. Because macFUSE and the Linux FUSE module have different
+implementations, the per-operation overhead differs between the two
+platforms. The evaluation reports results for both platforms separately.
+
+\section{FUSE: Filesystem in Userspace}
+\label{sec:bg-fuse}
+
+FUSE (Filesystem in Userspace) is a framework for implementing a filesystem
+as a regular user-space program instead of kernel code. This makes
+development and testing easier: a bug crashes the process, not the kernel.
+Filesystem logic can be written in any language with FUSE bindings and
+deployed without kernel patches or reboots.
+
+When an application reads a file on a FUSE mount, the kernel sends the
+request to the user-space filesystem process and waits for the result. This
+round-trip happens on every read and adds latency. On Linux, the cost is
+typically 10--100 microseconds per operation, which adds up quickly for
+workloads with many small reads. macFUSE on macOS adds a similar cost.
+
+JazzyFS uses FUSE because the goal is to study prefetching behavior, not to
+build a production filesystem. FUSE provides a clear intercept point on
+every read, which is exactly what is needed to observe access patterns and
+test different prefetching strategies. The FUSE overhead is measured and
+reported in the evaluation so it can be separated from the cost of the
+prefetching logic itself.
+
+\subsection{FUSE on Linux and macOS}
+
+FUSE works differently on Linux and macOS. On Linux, FUSE is built into
+the kernel as a loadable module (\texttt{fuse.ko}), and the \texttt{fusepy}
+library communicates with it through \texttt{/dev/fuse}. On macOS, the
+kernel does not include FUSE natively, so macFUSE (formerly OSXFUSE)
+provides it as a third-party kernel extension. Because the two
+implementations use different kernel paths, their per-operation costs
+differ. In the JazzyFS evaluation, the null prefetcher adds approximately
+388\% overhead on Linux and approximately 180\% on macOS for sequential
+workloads, which reflects this difference.
+
+\section{Prefetching Techniques}
+\label{sec:bg-prefetch}
+
+Prefetching loads data into memory before it is requested, reducing the
+time the CPU spends waiting on storage. The idea is that if past access
+patterns are a good predictor of future ones, loading ahead can hide
+latency. When the prediction is correct, performance improves. When it is
+wrong, bandwidth is wasted and the cache fills with data that is never
+used. JazzyFS uses three strategies that range from no prefetching to
+always prefetching to prefetching only when the pattern looks sequential,
+which makes it possible to isolate the cost and benefit of each approach.
+
+\subsection{Sequential Prefetching}
+
+The simplest prefetching strategy is sequential read-ahead: after reading
+block $b$, fetch block $b+1$ into the page cache. This is built into the
+Linux kernel's \texttt{readahead} subsystem. It works well for sequential
+workloads, but it has no awareness of access patterns. It always fetches
+ahead regardless of whether the workload is actually sequential, which
+wastes bandwidth and fills the cache with unused data on irregular
+workloads.
+
+\subsection{Fixed-Policy Read-Ahead}
+
+JazzyFS's OBL baseline implements the One Block Lookahead strategy. After
+every read at offset $o$ for $n$ bytes, it issues a speculative read at
+offset $o + n$ for 4~KB. The policy is unconditional: it fires on every
+read regardless of the access pattern. On sequential workloads, this works
+well because the prefetched block is almost always the next one needed. On
+non-sequential workloads, every prefetch misses, consuming bandwidth and
+filling the cache with data that is never used. In the JazzyFS evaluation,
+OBL represents the always-prefetch extreme and provides a direct comparison
+point for the adaptive strategy.
+
+\section{Feedback-Directed Prefetching}
+\label{sec:bg-feedback}
+
+Feedback-directed prefetching improves on static strategies by using the
+results of past prefetches to control future ones. The idea is that a
+prefetcher can track whether the blocks it fetched were actually used. If
+prefetches are consistently hitting, it can fetch more aggressively. If they
+are consistently missing, it can slow down or stop. This allows the
+prefetcher to adapt to the workload without any manual configuration or
+training data.
+
+Traditional feedback-directed prefetchers work at the hardware level and
+use performance counters in the CPU or memory controller to measure hit
+rates. JazzyFS takes a simpler approach: rather than tracking whether
+prefetched blocks were actually used, it uses the contiguity of incoming
+read offsets as a proxy signal. If recent reads are contiguous, confidence
+is high and prefetching is enabled. If they are scattered, confidence is
+low and prefetching is skipped. This is a pattern-observation signal, not
+a hit/miss feedback loop. The full mechanism is described in
+Chapter~\ref{ch:design}.
+
+\section{Observability in Systems}
+\label{sec:bg-obs}
+
+Observability is the ability to understand what a system is doing from its
+external outputs. In storage systems, this usually means looking at access
+patterns, latency, and cache behavior. Traditional tools like
+\texttt{blktrace}, \texttt{perf}, and DTrace provide detailed data, but
+they require post-processing. An engineer must collect a trace, then
+analyze it separately before drawing any conclusions about what the system
+was doing. There is no immediate feedback while a workload is running.
+
+\subsection{Sonification}
+
+Sonification is the use of non-speech audio to convey data or
+information. Unlike visualization, which requires
+attention to a screen, sonification can operate in the periphery of awareness,
+allowing a practitioner to monitor system state while focusing on other work.
+
+Sonification has been applied in medical monitoring, astronomy, and network
+security. Its application to filesystem
+behavior is less explored. A well-established sonification design principle
+is to map independent state dimensions to orthogonal perceptual parameters
+so that each audio channel carries a distinct, non-redundant signal.
+JazzyFS's sonification design, described in Chapter~\ref{ch:design},
+follows this principle.
+
+
+% ============================================================
+% Chapter 3: Design
+% ============================================================
+\chapter{Design}
+\label{ch:design}
+
+This chapter describes the design and implementation of JazzyFS.
+Section~\ref{sec:design-arch} presents the overall architecture.
+Section~\ref{sec:design-window} describes the sliding-window access tracker.
+Section~\ref{sec:design-phase} explains the phase detection algorithm.
+Section~\ref{sec:design-confidence} describes the confidence scorer.
+Section~\ref{sec:design-strategies} specifies the three prefetching strategies.
+Section~\ref{sec:design-sonification} presents the sonification engine.
+Section~\ref{sec:design-read} describes the read callback logic.
+Section~\ref{sec:design-impl} covers implementation details.
+
+\section{Architecture Overview}
+\label{sec:design-arch}
+
+JazzyFS is a passthrough FUSE filesystem. It mounts an existing directory
+and forwards all filesystem operations to the underlying filesystem. It is
+read-only; write operations are rejected. All prefetching and observation
+logic lives on the read path only. The underlying filesystem handles actual
+storage, and JazzyFS only intercepts reads to observe access patterns and
+decide whether to prefetch.
+
+The main class is \texttt{PassthroughRO}, which implements five FUSE
+callbacks: \texttt{getattr}, \texttt{readdir}, \texttt{open}, \texttt{read},
+and \texttt{release}. All prefetching and phase detection logic runs inside \texttt{read()}; sonification playback runs in a separate background thread.
+The other callbacks pass requests through with no added logic.
+
+\section{Sliding-Window Access Tracker}
+\label{sec:design-window}
+
+JazzyFS keeps a sliding window of the last 1000 read events. Each entry
+stores the file path, byte offset, and read size. The 1000-entry cap keeps
+memory usage bounded no matter how long a workload runs. Phase detection
+and confidence scoring only look at the most recent \texttt{PHASE\_WINDOW=5}
+entries, so both stay fast regardless of total run length.
+
+The window clears automatically if more than 2 seconds pass between reads.
+This separates back-to-back workload runs without needing an explicit reset,
+and also handles the case where one workload ends and a new one begins
+without remounting.
+
+\section{Phase Detection}
+\label{sec:design-phase}
+
+The phase detector looks at a window of up to the last five reads and classifies
+the access pattern as \texttt{sequential}, \texttt{irregular}, or \texttt{unknown}.
+A transition between two consecutive reads is sequential if the current
+read starts exactly where the previous one ended:
+\[
+\text{prev.offset} + \text{prev.size} = \text{curr.offset}
+\]
+If all observed transitions in the current window are sequential, the phase is
+\texttt{sequential}. Otherwise it is \texttt{irregular}. With a full five-read
+window, this means all four transitions must match; a single non-contiguous
+read is enough to flip the label. \texttt{unknown} is returned if fewer than two reads have been recorded,
+since no transition can be computed yet.
+
+\section{Confidence Scorer}
+\label{sec:design-confidence}
+
+The confidence scorer produces a value in $[0, 1]$ representing the
+fraction of sequential transitions in the current window:
+\[
+\text{confidence} = \frac{\text{sequential transitions}}{\text{total transitions}}
+\]
+A score of 1.00 indicates a perfectly sequential stream; 0.00 indicates
+a fully random one; values in between reflect mixed patterns. Unlike
+hardware prefetchers that rely on performance counters, this score requires
+no training data and is computed directly from the current window on every
+read.
+
+The adaptive mode uses a threshold of 0.7 to decide whether to prefetch.
+Because prefetching also requires the phase to be \texttt{sequential}, and
+the phase detector itself requires all four transitions to match, the
+effective gate is all four transitions being sequential. A fully sequential
+window produces a confidence of 1.0, which always clears the 0.7 threshold.
+Under current parameters the confidence threshold does not add filtering
+beyond what the phase check already enforces. The confidence value is logged
+on every read and included in the evaluation results, so it can be compared
+directly with observed overhead.
+
+\section{Prefetching Strategies}
+\label{sec:design-strategies}
+
+JazzyFS implements three prefetching strategies, selectable at mount time
+via the \texttt{JAZZYFS\_MODE} environment variable:
+
+\begin{itemize}
+    \item \textbf{Null Prefetcher} (\texttt{none}): never issues any
+    read-ahead. Isolates FUSE interposition cost from prefetching cost.
+
+    \item \textbf{One Block Lookahead} (\texttt{baseline}): unconditionally
+    issues a speculative read of 4~KB immediately following every
+    \texttt{read()} call, regardless of access pattern.
+
+    \item \textbf{Feedback-Directed Sequential Prefetcher}
+    (\texttt{adaptive}): issues a prefetch if and only if the current phase
+    is \texttt{sequential} and confidence $\geq 0.7$. Because
+    \texttt{sequential} requires all four transitions to match, all four
+    must be sequential before prefetching is enabled.
+\end{itemize}
+
+The prefetch depth, set via \texttt{JAZZYFS\_PREFETCH\_DEPTH} (default 1),
+controls how many 4~KB blocks are read ahead per prefetch. The three
+strategies span the full range from no prefetching (\texttt{none}) to
+always prefetching (\texttt{baseline}) to prefetching only when the pattern
+is sequential (\texttt{adaptive}), allowing direct comparison across all
+conditions.
+
+\section{Sonification Engine}
+\label{sec:design-sonification}
+
+The sonification engine maps three internal state values to three
+independent musical parameters:
+
+\begin{itemize}
+    \item \textbf{Mode} $\rightarrow$ \textbf{scale}: \texttt{none} uses
+    Major; \texttt{baseline} uses Natural Minor; \texttt{adaptive} uses
+    Harmonic Minor.
+    \item \textbf{Phase} $\rightarrow$ \textbf{tempo}: sequential phases
+    play at 0.15~s per note; irregular phases play at 1.2~s per note.
+    \item \textbf{Confidence} $\rightarrow$ \textbf{melodic direction}:
+    confidence $\geq 0.5$ produces an ascending melody; confidence $< 0.5$
+    produces a descending melody.
+\end{itemize}
+
+A background thread detects when a workload finishes by waiting for 1
+second of read inactivity, then waits an additional 5 seconds before
+beginning audio playback. The phase history
+is divided into segments, each played at its corresponding tempo with chord
+progressions for support. Because each parameter maps to a separate musical
+dimension, the design aims to make mode, phase, and confidence
+perceptually distinguishable without them interfering with each other.
+
+\section{Read Callback Logic}
+\label{sec:design-read}
+
+The core prefetching and phase detection logic executes within the \texttt{read()} callback; sonification playback runs in a separate background thread.
+Listing~\ref{lst:read} shows the implementation of this callback.
+
+\begin{lstlisting}[language=Python, caption={JazzyFS \texttt{read()} callback.}, label={lst:read}]
+def read(self, path, size, offset, fh):
+    # 1. Perform the actual read; confirm position with a second lseek.
+    os.lseek(fh, offset, os.SEEK_SET)
+    actual_offset = os.lseek(fh, 0, os.SEEK_CUR)
+    data = os.read(fh, size)
+    self._log_read(path, actual_offset, len(data))  # write to access.csv
+
+    # 2. Under the state lock: reset histories on idle, append event,
+    #    detect phase for sonification, update last_read_time.
+    with self._state_lock:
+        if time.time() - self.last_read_time > 2.0:
+            self.trace.clear()
+            self.phase_history.clear()
+            self.confidence_history.clear()
+            self.prefetch_history.clear()
+        self.trace.append({"t": time.time(), "path": path,
+                           "offset": actual_offset, "size": len(data)})
+        sonification_phase = self._detect_phase()
+        if sonification_phase != "unknown":
+            self.phase_history.append(sonification_phase)
+        self.last_read_time = time.time()
+
+    # 3. Compute confidence outside lock (reads trace, no modification).
+    phase      = sonification_phase
+    confidence = self._prediction_confidence()
+
+    # 4. Decide whether to prefetch.
+    prefetch = False
+    prefetch_offset = None
+    if self.prefetch_enabled and len(data) > 0:
+        if self.mode == MODE_BASELINE:
+            prefetch = True
+        elif self.mode == MODE_ADAPTIVE:
+            prefetch = (phase == "sequential" and
+                        confidence >= CONFIDENCE_THRESHOLD)
+        if prefetch:
+            prefetch_offset = actual_offset + len(data)
+            self._prefetch_next(self._full(path),
+                                prefetch_offset, self.prefetch_size)
+
+    # 5. Update sonification histories.
+    with self._state_lock:
+        self.confidence_history.append(confidence)
+        self.prefetch_history.append(prefetch)
+
+    # 6. Log decision to decisions.csv.
+    self._log_decision(path, actual_offset, len(data),
+                       phase, confidence, prefetch, prefetch_offset)
+    return data
+\end{lstlisting}
+
+The callback performs the actual read first, then runs the phase analysis
+and prefetch decision. The prefetch helper reads ahead by
+\texttt{prefetch\_size} bytes, which the kernel retains in the page cache
+so future accesses to that data are served from memory.
+
+\section{Implementation}
+\label{sec:design-impl}
+
+JazzyFS is a single Python file (\texttt{jazzyfs\_min.py}, approximately
+880 lines) using \texttt{fusepy} for FUSE bindings and \texttt{sox} for
+audio. Mode and workload name are passed in via environment variables.
+Each read is logged to \texttt{access.csv} and each prefetch decision to
+\texttt{decisions.csv}. Both files flush after every row so logs are not
+lost if the process is interrupted.
+
+A lock (\texttt{\_state\_lock}) protects shared state between the FUSE
+callbacks and the background audio thread. Because \texttt{nothreads=True}
+serializes all FUSE callbacks, no extra locking is needed inside the read
+path itself.
+
+\subsection{Experiment Harness}
+
+The experiment harness is a separate script that automates all experimental
+runs. For each combination of workload, mode, and repetition index, it:
+\begin{enumerate}
+    \item Sets the environment variables for that run.
+    \item Mounts JazzyFS and waits for the mountpoint to become accessible.
+    \item Records the start time, executes the workload script, and records
+    the end time.
+    \item Unmounts JazzyFS and waits for all log writes to flush.
+    \item Appends the timing result to a per-run CSV file.
+\end{enumerate}
+
+After all runs complete, a separate analysis script reads the per-run CSVs,
+computes summary statistics, and generates the figures and tables used in
+this thesis.
+
+\subsection{Parameter Summary}
+
+Table~\ref{tab:params} summarizes the key design parameters of JazzyFS and
+their default values.
+
+\begin{table}[H]
+\centering
+\caption{JazzyFS design parameters and default values. Parameters shown in uppercase are configurable via environment variables; the remainder are hardcoded constants.}
+\label{tab:params}
+\begin{tabular}{lll}
+\toprule
+Parameter & Default & Description \\
+\midrule
+\texttt{JAZZYFS\_MODE}            & \texttt{adaptive} & Prefetching algorithm \\
+\texttt{JAZZYFS\_PREFETCH\_DEPTH} & 1                 & Blocks per prefetch \\
+\texttt{PHASE\_WINDOW}            & 5                 & Reads in classifier window \\
+\texttt{CONFIDENCE\_THRESHOLD}    & 0.7               & Minimum confidence to prefetch \\
+\texttt{prefetch\_size}           & 4096 bytes        & Prefetch unit size \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\end{document}

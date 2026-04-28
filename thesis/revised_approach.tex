@@ -1,0 +1,203 @@
+\documentclass[12pt]{article}
+\usepackage[left=1.5in, right=1.25in, top=1.25in, bottom=1.25in]{geometry}
+\usepackage{setspace}
+\usepackage{booktabs}
+\usepackage{times}
+\doublespacing
+
+\begin{document}
+
+\begin{center}
+{\large \textbf{JazzyFS: Revised Thesis Approach}}\\[0.2in]
+{\normalsize Michelle Gurovith\\
+University of California, Santa Cruz\\
+June 2026}
+\end{center}
+
+\section*{Revised Positioning}
+
+Prior work including the Linux kernel readahead, GFPP, and SPP demonstrates
+that adaptive prefetching is not a new problem. The Linux kernel already detects
+sequential versus random access patterns and adjusts prefetching accordingly.
+Advanced research systems such as GFPP use deep graph neural networks to
+produce confidence scores internally, while SPP uses path confidence to throttle
+prefetching at the microarchitectural level.
+
+However, none of these systems expose their prediction uncertainty as a
+first-class observable signal at the filesystem level. SPP keeps confidence
+internal to the microarchitecture. GFPP requires training data and operates
+as a black-box model. No existing filesystem-level prefetcher logs
+per-decision confidence values as a user-accessible signal, exposes a
+tunable confidence threshold at runtime without kernel modification, or
+uses sonification specifically as a prefetching observability interface.
+
+Traditional filesystem prefetchers already approximate confidence implicitly:
+the Linux readahead window grows when sequential reads succeed and shrinks when
+they fail, but this reaction is delayed by several read cycles and the signal
+driving it is never named or exposed. JazzyFS formalizes this implicit signal as
+an explicit, per-decision confidence value and uses it as a \textbf{direct
+control mechanism}. JazzyFS is therefore repositioned not as a new prefetching
+algorithm, but as a \textbf{transparent, training-free, cross-platform platform}
+that replaces implicit heuristic control with explicit confidence-driven control,
+reducing unnecessary prefetching and improving responsiveness to workload changes
+without kernel modification.
+
+\section*{Novel Contributions}
+
+Research confirms three contributions that are novel at the filesystem level:
+
+\begin{enumerate}
+
+    \item \textbf{Sonification as a Human-in-the-Loop Prefetching Interface.}
+    JazzyFS is the first system to use intentional sonification as a
+    prefetching observability interface and to lay the groundwork for a
+    human-in-the-loop feedback loop: the operator hears confidence drop,
+    intervenes, and the system adjusts future prefetching behavior. No
+    existing filesystem or prefetcher --- kernel or research --- has
+    implemented this closed-loop approach. Prior acoustic research concerns
+    unintentional hardware noise for security side-channels, not deliberate
+    operator-facing observability by design.
+
+    \item \textbf{Confidence Decay Rate as a Phase Change Metric.}
+    Existing prefetchers track confidence values but do not measure how fast
+    confidence drops when a workload changes. JazzyFS exposes this decay rate
+    as a first-class metric: a fast drop indicates an abrupt phase change
+    while a slow drop indicates gradual drift. No filesystem prefetcher
+    currently distinguishes between these two cases. This distinction has
+    direct system impact: detecting an abrupt drop enables immediate
+    suppression of prefetching, reducing cache pollution and wasted I/O
+    during sudden transitions. Linux readahead's implicit heuristic requires
+    multiple failed reads before the window shrinks; JazzyFS's explicit
+    signal enables the same decision in a single cycle. This metric is
+    derivable directly from JazzyFS's existing per-decision logs without
+    additional experiments.
+
+    \item \textbf{Confidence Trajectory Classification Without Training.}
+    Every existing adaptive prefetcher uses confidence to answer the same
+    question: what block or file comes next? JazzyFS uses the temporal shape
+    of the confidence curve --- how it rises, falls, or oscillates over time
+    --- to answer a fundamentally different question: what kind of workload
+    is currently running? A fast rise signals sequential access; a value near
+    zero signals random access; oscillation signals mixed access. This
+    inversion has direct system impact: a system that classifies its workload
+    as random at file-open time can suppress prefetching immediately rather
+    than waiting for confidence to degrade read by read. Existing prefetchers
+    react to evidence of failure; trajectory classification enables proactive
+    control before failures accumulate. This classification has no precedent
+    at the filesystem level and is derivable directly from JazzyFS's existing
+    per-decision logs without new experiments.
+
+\end{enumerate}
+
+\section*{Revised Research Questions}
+
+\begin{enumerate}
+
+    \item \textbf{FUSE Overhead vs.\ Adaptive Logic Cost.}
+    What is the overhead cost of making prefetching decisions explicit and
+    observable in user-space FUSE, and is that overhead dominated by the
+    FUSE interposition layer or by the adaptive logic itself?
+
+    \item \textbf{Confidence Threshold Sensitivity.}
+    How does the confidence threshold affect prefetching effectiveness across
+    different workload types, and what threshold minimizes overhead while
+    maintaining prefetch benefit on sequential workloads?
+
+    \item \textbf{Confidence Decay Rate and Phase Transition Speed.}
+    How quickly does a sliding-window confidence scorer detect workload phase
+    transitions, and does the rate of confidence decay distinguish abrupt
+    phase changes from gradual workload drift?
+
+    \item \textbf{Confidence Trajectory Classification.}
+    Does the temporal shape of the confidence curve --- how it rises, falls,
+    or oscillates --- reliably classify the workload type currently running,
+    and does this training-free classification match the ground-truth workload
+    labels assigned during experiment construction?
+
+    \item \textbf{Sonification as a Human-in-the-Loop Interface.}
+    Does intentional sonification of prefetching confidence produce an
+    auditory signal operators can act on, and does it lay the groundwork
+    for a closed-loop system where an operator hears confidence drop,
+    intervenes, and the prefetcher adjusts --- something no existing
+    filesystem or prefetcher has implemented?
+
+\end{enumerate}
+
+\section*{Experimental Changes}
+
+\subsection*{Experiments Removed}
+
+\begin{tabular}{lp{10cm}}
+\toprule
+Removed Experiment & Reason \\
+\midrule
+Prefetch depth sweep (1, 2, 4, 8) &
+Results show depth greater than one provides no benefit and only increases
+overhead. The conclusion is always depth~1 is optimal, which does not
+advance the thesis contribution. \\[0.2in]
+Baseline OBL as primary comparison &
+The kernel already performs unconditional readahead. OBL inside FUSE
+replicates existing kernel behavior and does not represent a novel
+comparison point given the revised framing. \\
+\bottomrule
+\end{tabular}
+
+\subsection*{Experiments Added}
+
+\begin{tabular}{lp{9cm}}
+\toprule
+New Experiment & Description \\
+\midrule
+Confidence threshold sweep
+(0.3, 0.5, 0.7, 0.9) &
+Run all seven workloads at each threshold value using the existing
+experiment harness. Measure execution time, prefetch rate, and overhead
+at each threshold. Directly supports the tunable confidence contribution.
+Replaces the depth sweep with the same experimental structure. \\[0.2in]
+Confidence decay rate analysis &
+Using existing decision logs from the phase\_change workload, measure
+how many reads it takes for confidence to drop below the threshold after
+the pattern switches from sequential to random. Compute the decay rate
+and classify it as abrupt or gradual. No new experiment runs required ---
+existing logs contain this data. \\[0.2in]
+Confidence trajectory classification &
+Using existing decision logs, extract the confidence curve for each
+workload run and classify its shape as rising (sequential), near-zero
+(random), or oscillating (mixed). Compare classifications against
+ground-truth workload labels. No new experiment runs required ---
+existing logs contain this data. \\
+\bottomrule
+\end{tabular}
+
+\subsection*{Experiments Retained}
+
+\begin{itemize}
+    \item Native vs.\ FUSE overhead comparison across all seven workloads
+    (answers RQ1 directly)
+    \item Adaptive vs.\ null prefetcher comparison (answers RQ4 directly)
+    \item Cross-platform Linux ext4 vs.\ macOS APFS comparison
+    \item Confidence score behavior across workload types
+    (sequential $\approx 0.999$, irregular $= 0.000$, mixed $\approx 0.500$)
+\end{itemize}
+
+\section*{Revised Thesis Statement}
+
+Traditional filesystem prefetchers control prefetching through implicit
+heuristics --- detecting sequential patterns and adjusting readahead window
+sizes --- but react slowly when workload behavior changes and expose no signal
+an operator or policy can act on directly. JazzyFS replaces this implicit
+control with an explicit, per-decision confidence value that drives prefetching
+suppression immediately when confidence drops, reducing unnecessary I/O and
+improving responsiveness to workload phase changes without kernel modification.
+It introduces three contributions at the filesystem level: (1) sonification as
+an operator-facing interface for human-in-the-loop control of prefetching
+behavior, enabling a closed-loop system no existing filesystem has implemented;
+(2) confidence decay rate as a metric that quantifies how quickly the prefetcher
+detects a phase change, enabling faster suppression of wasted prefetching than
+implicit heuristics allow; and (3) confidence trajectory shape as a
+training-free workload classifier that inverts the standard use of confidence
+--- rather than predicting the next access, it identifies the type of workload
+currently running, enabling proactive prefetch control before failure evidence
+accumulates.
+
+\end{document}
