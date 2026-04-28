@@ -39,7 +39,7 @@ _workload_script() {
 
 _reset_logs() {
     echo "run_index,run_label,mode,workload,seq,timestamp,path,offset,size" > "$LOG_ACCESS"
-    echo "run_index,run_label,mode,workload,timestamp,path,offset,size,phase,confidence,prefetch,prefetch_offset,prefetch_size,prefetch_depth" > "$LOG_DECISIONS"
+    echo "run_index,run_label,mode,workload,timestamp,path,offset,size,phase,confidence,decay_rate,prefetch,prefetch_offset,prefetch_size,prefetch_depth" > "$LOG_DECISIONS"
 }
 
 _mount_jazzyfs() {

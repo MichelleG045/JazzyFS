@@ -1,0 +1,8 @@
+workload,reads,mean,std,classified_as,ground_truth,match
+cache_lookup_workload,4000,0.000,0.000,near-zero,near-zero,yes
+concurrent,400,0.000,0.000,near-zero,near-zero,yes
+phase_change,32540,0.983,0.125,phase-change,phase-change,yes
+python_import,8000,0.500,0.036,mixed,mixed,yes
+random,300,0.000,0.000,near-zero,near-zero,yes
+sequential,16020,0.999,0.035,stable-high,stable-high,yes
+tar_workload,3320,0.994,0.077,stable-high,stable-high,yes

@@ -17,31 +17,27 @@ echo "  JazzyFS Full Experiment Pipeline"
 echo "========================================"
 echo ""
 
-echo "[1/7] Main experiments (access + decision logs)..."
+echo "[1/6] Main experiments (access + decision logs)..."
 bash Experiments/run_experiments.sh "$SOURCE_DIR" "$MOUNT_DIR"
 
 echo ""
-echo "[2/7] Native timing baseline..."
+echo "[2/6] Native timing baseline..."
 bash Experiments/run_native_timing.sh "$SOURCE_DIR" "$MOUNT_DIR"
 
 echo ""
-echo "[3/7] JazzyFS timing — mode: none..."
+echo "[3/6] JazzyFS timing — mode: none..."
 bash Experiments/run_jazzyfs_timing.sh none "$SOURCE_DIR" "$MOUNT_DIR"
 
 echo ""
-echo "[4/7] JazzyFS timing — mode: baseline..."
+echo "[4/6] JazzyFS timing — mode: baseline..."
 bash Experiments/run_jazzyfs_timing.sh baseline "$SOURCE_DIR" "$MOUNT_DIR"
 
 echo ""
-echo "[5/7] JazzyFS timing — mode: adaptive..."
+echo "[5/6] JazzyFS timing — mode: adaptive..."
 bash Experiments/run_jazzyfs_timing.sh adaptive "$SOURCE_DIR" "$MOUNT_DIR"
 
 echo ""
-echo "[6/7] Prefetch depth sweep..."
-bash Experiments/run_depth_sweep.sh "$SOURCE_DIR" "$MOUNT_DIR"
-
-echo ""
-echo "[7/7] Summarizing results and generating figures..."
+echo "[6/6] Summarizing results and generating figures..."
 python3 Experiments/result_summary.py
 python3 Experiments/plot_results.py
 
