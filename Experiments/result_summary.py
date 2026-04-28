@@ -15,23 +15,9 @@ _args, _ = _parser.parse_known_args()
 PLATFORM = _args.platform or ("apfs" if platform.system() == "Darwin" else "linux")
 RESULTS_DIR = f"results/{PLATFORM}"
 NATIVE_DIR = os.path.join(RESULTS_DIR, "native")
-DEPTH_DIR = os.path.join(RESULTS_DIR, "depth")
 
 DECISION_OUTPUT  = os.path.join(RESULTS_DIR, "decision_summary.csv")
 TIMING_OUTPUT    = os.path.join(RESULTS_DIR, "timing_summary.csv")
-ACCURACY_OUTPUT  = os.path.join(RESULTS_DIR, "phase_accuracy_summary.csv")
-
-# Ground-truth expected phase for each workload
-# Used to validate that the phase detector classifies correctly
-EXPECTED_PHASE = {
-    "sequential":            "sequential",
-    "random":                "irregular",
-    "phase_change":          "mixed",       # contains both phases
-    "tar_workload":          "sequential",
-    "python_import":         "irregular",
-    "cache_lookup_workload": "irregular",
-    "concurrent":            "irregular",
-}
 
 WORKLOADS = [
     "sequential",
@@ -42,7 +28,6 @@ WORKLOADS = [
     "cache_lookup_workload",
     "concurrent",
 ]
-DEPTHS = [1, 2, 4, 8]
 
 
 def read_timing_file(filepath):
@@ -144,12 +129,6 @@ def summarize_timing():
 
         timing_data[mode] = read_timing_file(filepath)
 
-    depth_data = {}
-    for depth in DEPTHS:
-        filepath = os.path.join(DEPTH_DIR, f"jazzyfs_adaptive_depth{depth}_timing.csv")
-        if os.path.exists(filepath):
-            depth_data[depth] = read_timing_file(filepath)
-
     with open(TIMING_OUTPUT, "w", newline="") as out:
         writer = csv.writer(out)
         writer.writerow([
@@ -185,81 +164,8 @@ def summarize_timing():
                     f"{minimum:.4f}", f"{maximum:.4f}", overhead
                 ])
 
-            for depth in DEPTHS:
-                times = depth_data.get(depth, {}).get(workload)
-                if not times:
-                    continue
-
-                n = len(times)
-                avg = sum(times) / n
-                std = statistics.stdev(times) if n > 1 else 0.0
-                ci = ci95(times)
-                minimum = min(times)
-                maximum = max(times)
-                overhead = f"{((avg - native_avg) / native_avg) * 100:+.1f}%"
-
-                writer.writerow([
-                    workload, f"adaptive_depth{depth}", n,
-                    f"{avg:.4f}", f"{std:.4f}", f"{ci:.4f}",
-                    f"{minimum:.4f}", f"{maximum:.4f}", overhead
-                ])
 
     print(f"[OK] Saved timing summary to {TIMING_OUTPUT}")
-
-
-def summarize_phase_accuracy():
-    """Compare detected phases against known ground-truth expected phases per workload."""
-    results = defaultdict(lambda: {"correct": 0, "total": 0})
-
-    for workload, expected in EXPECTED_PHASE.items():
-        workload_dir = os.path.join(RESULTS_DIR, workload)
-        if not os.path.isdir(workload_dir):
-            continue
-
-        for mode_name in sorted(os.listdir(workload_dir)):
-            mode_dir = os.path.join(workload_dir, mode_name)
-            if not os.path.isdir(mode_dir):
-                continue
-
-            for run_name in sorted(os.listdir(mode_dir)):
-                decisions = os.path.join(mode_dir, run_name, "decisions.csv")
-                if not os.path.isfile(decisions):
-                    continue
-
-                phases_seen = set()
-                with open(decisions, newline="") as f:
-                    for row in csv.DictReader(f):
-                        phase = row.get("phase", "").strip()
-                        if phase in ("sequential", "irregular"):
-                            phases_seen.add(phase)
-
-                if expected == "mixed":
-                    correct = len(phases_seen) == 2
-                elif expected == "sequential":
-                    correct = phases_seen == {"sequential"} or (
-                        "sequential" in phases_seen and "irregular" not in phases_seen
-                    )
-                else:  # irregular
-                    correct = "sequential" not in phases_seen or "irregular" in phases_seen
-
-                results[workload]["correct"] += int(correct)
-                results[workload]["total"]   += 1
-
-    with open(ACCURACY_OUTPUT, "w", newline="") as f:
-        writer = csv.writer(f)
-        writer.writerow(["workload", "expected_phase", "runs", "correct", "accuracy"])
-        for workload in sorted(results):
-            r = results[workload]
-            acc = r["correct"] / r["total"] if r["total"] > 0 else 0.0
-            writer.writerow([
-                workload,
-                EXPECTED_PHASE.get(workload, "unknown"),
-                r["total"],
-                r["correct"],
-                f"{acc:.4f}",
-            ])
-
-    print(f"[OK] Saved phase accuracy summary to {ACCURACY_OUTPUT}")
 
 
 def main():
@@ -267,7 +173,6 @@ def main():
     print(f"[Platform] {PLATFORM}")
     summarize_decisions()
     summarize_timing()
-    summarize_phase_accuracy()
 
 
 if __name__ == "__main__":
