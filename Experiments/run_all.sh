@@ -17,29 +17,42 @@ echo "  JazzyFS Full Experiment Pipeline"
 echo "========================================"
 echo ""
 
-echo "[1/6] Main experiments (access + decision logs)..."
+echo "[1/9] Main experiments (access + decision logs)..."
 bash Experiments/run_experiments.sh "$SOURCE_DIR" "$MOUNT_DIR"
 
 echo ""
-echo "[2/6] Native timing baseline..."
+echo "[2/9] Native timing baseline..."
 bash Experiments/run_native_timing.sh "$SOURCE_DIR" "$MOUNT_DIR"
 
 echo ""
-echo "[3/6] JazzyFS timing — mode: none..."
+echo "[3/9] JazzyFS timing — mode: none..."
 bash Experiments/run_jazzyfs_timing.sh none "$SOURCE_DIR" "$MOUNT_DIR"
 
 echo ""
-echo "[4/6] JazzyFS timing — mode: baseline..."
+echo "[4/9] JazzyFS timing — mode: baseline..."
 bash Experiments/run_jazzyfs_timing.sh baseline "$SOURCE_DIR" "$MOUNT_DIR"
 
 echo ""
-echo "[5/6] JazzyFS timing — mode: adaptive..."
+echo "[5/9] JazzyFS timing — mode: adaptive..."
 bash Experiments/run_jazzyfs_timing.sh adaptive "$SOURCE_DIR" "$MOUNT_DIR"
 
 echo ""
-echo "[6/6] Summarizing results and generating figures..."
+echo "[6/9] Confidence threshold sweep..."
+bash Experiments/run_threshold_sweep.sh "$SOURCE_DIR" "$MOUNT_DIR"
+
+echo ""
+echo "[7/9] Summarizing results and generating figures..."
 python3 Experiments/result_summary.py
 python3 Experiments/plot_results.py
+
+echo ""
+echo "[8/9] Threshold sweep analysis..."
+python3 source/threshold_sweep_analysis.py
+
+echo ""
+echo "[9/9] Trajectory classification and decay rate analysis..."
+python3 source/trajectory_classification.py
+python3 source/decay_rate_analysis.py
 
 echo ""
 echo "========================================"

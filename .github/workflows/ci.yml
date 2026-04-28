@@ -34,8 +34,20 @@ jobs:
       - name: Check plot_results.py syntax
         run: python3 -m py_compile Experiments/plot_results.py
 
+      - name: Check trajectory_classification.py syntax
+        run: python3 -m py_compile source/trajectory_classification.py
+
+      - name: Check decay_rate_analysis.py syntax
+        run: python3 -m py_compile source/decay_rate_analysis.py
+
+      - name: Check threshold_sweep_analysis.py syntax
+        run: python3 -m py_compile source/threshold_sweep_analysis.py
+
       - name: Run result summary against saved results (APFS)
         run: python3 Experiments/result_summary.py --platform apfs
 
       - name: Run result summary against saved results (Linux)
         run: python3 Experiments/result_summary.py --platform linux
+
+      - name: Run trajectory classification against saved results
+        run: python3 source/trajectory_classification.py

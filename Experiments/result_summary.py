@@ -108,7 +108,6 @@ def summarize_decisions():
 
 def summarize_timing():
     os.makedirs(NATIVE_DIR, exist_ok=True)
-    os.makedirs(DEPTH_DIR, exist_ok=True)
 
     timing_data = {}
     for filename in sorted(os.listdir(NATIVE_DIR)):

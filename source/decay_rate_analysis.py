@@ -37,7 +37,6 @@ def analyze_run(csv_path: Path) -> dict | None:
 
     confidences = [float(r["confidence"]) for r in rows]
     decay_rates = [float(r["decay_rate"]) for r in rows]
-    prefetches = [int(r["prefetch"]) for r in rows]
 
     # Find the transition: the last read with prefetch=1 followed by a
     # confidence drop. We look for the first read where decay_rate >= threshold.
