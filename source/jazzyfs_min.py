@@ -33,7 +33,8 @@ PHASE_WINDOW = 5
 # The minimum confidence score (0.0 – 1.0) required before adaptive mode will
 # issue a prefetch. At 0.7, at least 3 out of 4 recent transitions must be
 # sequential before we consider the pattern predictable enough to prefetch.
-CONFIDENCE_THRESHOLD = 0.7
+# Controlled at runtime via JAZZYFS_CONFIDENCE_THRESHOLD environment variable.
+CONFIDENCE_THRESHOLD = float(os.environ.get("JAZZYFS_CONFIDENCE_THRESHOLD", "0.7"))
 
 # How many extra blocks to read ahead when a prefetch is triggered.
 # 1 = only the immediately next block; 4 = four blocks ahead, etc.
