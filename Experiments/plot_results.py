@@ -37,7 +37,6 @@ WORKLOADS = [
     "concurrent",
 ]
 MODES  = ["none", "baseline", "adaptive"]
-DEPTHS = [1, 2, 4, 8]
 
 COLORS = {
     "native":   "#888888",
@@ -45,7 +44,6 @@ COLORS = {
     "baseline": "#f28e2b",
     "adaptive": "#59a14f",
 }
-DEPTH_COLORS = {1: "#4e79a7", 2: "#f28e2b", 4: "#59a14f", 8: "#e15759"}
 
 SHORT = {
     "sequential":            "seq",
@@ -227,30 +225,6 @@ def plot_confidence(decisions):
     print(f"[OK] {out}")
 
 
-def plot_depth_sweep(timing):
-    """Line chart: avg timing vs prefetch depth per workload."""
-    fig, ax = plt.subplots(figsize=(10, 5))
-
-    for w in WORKLOADS:
-        times = [timing.get((w, f"adaptive_depth{d}"), {}).get("avg") for d in DEPTHS]
-        if all(t is None for t in times):
-            continue
-        times = [t if t is not None else float("nan") for t in times]
-        ax.plot(DEPTHS, times, marker="o", label=SHORT[w])
-
-    ax.set_xlabel("Prefetch Depth (blocks)")
-    ax.set_ylabel("Average Wall-Clock Time (s)")
-    ax.set_title("Adaptive Prefetch Depth Sweep")
-    ax.set_xticks(DEPTHS)
-    ax.legend(fontsize=8)
-    ax.grid(alpha=0.3)
-
-    out = os.path.join(FIGURES_DIR, "depth_sweep.png")
-    plt.tight_layout()
-    plt.savefig(out, dpi=150)
-    plt.close()
-    print(f"[OK] {out}")
-
 
 # --------------------------------------------------
 # Main
@@ -267,7 +241,6 @@ def main():
     if timing:
         plot_timing_overhead(timing)
         plot_overhead_percent(timing)
-        plot_depth_sweep(timing)
 
     if decisions:
         plot_prefetch_rate(decisions)
