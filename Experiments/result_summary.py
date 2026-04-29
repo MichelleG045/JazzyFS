@@ -27,6 +27,7 @@ WORKLOADS = [
     "python_import",
     "cache_lookup_workload",
     "concurrent",
+    "strided",
 ]
 
 

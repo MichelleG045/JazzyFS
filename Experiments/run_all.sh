@@ -50,9 +50,10 @@ echo "[8/9] Threshold sweep analysis..."
 python3 source/threshold_sweep_analysis.py
 
 echo ""
-echo "[9/9] Trajectory classification and decay rate analysis..."
+echo "[9/9] Trajectory classification, decay rate, and stride accuracy analysis..."
 python3 source/trajectory_classification.py
 python3 source/decay_rate_analysis.py
+python3 source/stride_accuracy_analysis.py
 
 echo ""
 echo "========================================"
