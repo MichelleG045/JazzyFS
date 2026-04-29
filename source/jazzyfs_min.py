@@ -402,6 +402,30 @@ class PassthroughRO(Operations):
         # max(1, ...) guards against the edge case of a single-element window.
         return matches / max(1, len(recent) - 1)
 
+    def _detect_stride(self):
+        """
+        Detect a period-2 stride pattern: alternating deltas +n, +m where n != m.
+        Requires PHASE_WINDOW (5) trace entries, giving 4 consecutive deltas to check.
+        Returns the predicted next offset delta if the pattern is confirmed, else None.
+
+        Example: reads at offsets 0, 6144, 16384, 22528, 32768 → deltas 6144, 10240, 6144, 10240.
+        d[0]==d[2] and d[1]==d[3] and d[0]!=d[1] → period-2 confirmed.
+        After the last delta d[3] (== d[1]), next alternates back to d[0].
+
+        Neither Linux readahead nor sequential confidence scoring can identify this
+        pattern: confidence stays near 0.0 because the transitions are not contiguous.
+        """
+        if len(self.trace) < PHASE_WINDOW:
+            return None
+        recent = list(self.trace)[-PHASE_WINDOW:]
+        deltas = [recent[i]["offset"] - recent[i - 1]["offset"] for i in range(1, len(recent))]
+        if len(deltas) < 4:
+            return None
+        d = deltas
+        if d[0] == d[2] and d[1] == d[3] and d[0] != d[1] and d[0] > 0 and d[1] > 0:
+            return d[0]
+        return None
+
     def _prefetch_next(self, full_path, next_offset, size):
         """
         Warm the OS page cache by speculatively reading ahead of the current
@@ -803,6 +827,10 @@ class PassthroughRO(Operations):
         decay_rate = max(0.0, self.prev_confidence - confidence)
         self.prev_confidence = confidence
 
+        # Stride detection runs only in adaptive mode: checks for a period-2 repeating
+        # delta pattern (+n, +m, +n, +m) that confidence scoring cannot see.
+        stride_delta = self._detect_stride() if self.mode == MODE_ADAPTIVE else None
+
         prefetch = False
         prefetch_offset = None
 
@@ -819,17 +847,25 @@ class PassthroughRO(Operations):
             # Confidence-Guided Prefetching — the research contribution:
             # only prefetch when the pattern is measurably sequential AND
             # our confidence in that classification meets the threshold.
-            # If confidence drops abruptly (decay_rate >= threshold), stop immediately
-            # rather than waiting for confidence to fall read by read.
+            # Decay suppression fires first (abrupt phase change).
+            # Stride detection fires second: if a period-2 stride is confirmed,
+            # prefetch at the predicted stride offset even though confidence is 0.
             elif self.mode == MODE_ADAPTIVE:
                 if decay_rate >= self.decay_threshold:
                     prefetch = False
+                elif stride_delta is not None:
+                    prefetch = True
+                    phase = "strided"
                 else:
                     prefetch = (phase == "sequential" and confidence >= CONFIDENCE_THRESHOLD)
 
             if prefetch:
-                # The next block to prefetch starts immediately after the current read.
-                prefetch_offset = actual_offset + len(data)
+                # Stride-aware: prefetch at the predicted stride offset.
+                # Sequential: prefetch immediately after the current read.
+                prefetch_offset = (
+                    actual_offset + stride_delta if stride_delta is not None
+                    else actual_offset + len(data)
+                )
                 self._prefetch_next(self._full(path), prefetch_offset, self.prefetch_size)
 
         # Step 7: record this read's confidence and prefetch decision for sonification.
