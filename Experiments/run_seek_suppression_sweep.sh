@@ -30,7 +30,7 @@ _workload_script() {
 }
 
 _reset_decisions() {
-    echo "run_index,run_label,mode,workload,timestamp,path,offset,size,phase,confidence,decay_rate,seek_delta,prefetch,prefetch_offset,prefetch_size,prefetch_depth" > "$LOG_DECISIONS"
+    echo "run_index,run_label,mode,workload,timestamp,path,offset,size,phase,confidence,decay_rate,seek_delta,prefetch,prefetch_offset,prefetch_size,prefetch_depth,cache_hit,false_negative" > "$LOG_DECISIONS"
 }
 
 _mount_jazzyfs() {

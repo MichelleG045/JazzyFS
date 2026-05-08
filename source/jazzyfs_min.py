@@ -15,6 +15,9 @@ import sys
 import errno
 import time
 import csv
+import ctypes
+import ctypes.util
+import mmap as _mmap
 import random
 import subprocess
 import threading
@@ -205,7 +208,8 @@ class PassthroughRO(Operations):
             "run_index", "run_label", "mode", "workload",
             "timestamp", "path", "offset", "size",
             "phase", "confidence", "decay_rate", "seek_delta",
-            "prefetch", "prefetch_offset", "prefetch_size", "prefetch_depth"
+            "prefetch", "prefetch_offset", "prefetch_size", "prefetch_depth",
+            "cache_hit", "false_negative"
         ]
 
         def _prepare_log(path, expected_header):
@@ -262,6 +266,10 @@ class PassthroughRO(Operations):
         # confidence value. Default 0.25 = one window transition changed.
         self.prev_confidence = 0.0
         self.decay_threshold = float(os.environ.get("JAZZYFS_DECAY_THRESHOLD", "0.25"))
+
+        # Tracks offsets where adaptive mode suppressed a prefetch.
+        # If a subsequent read lands at one of these offsets, it's a false negative.
+        self._suppressed_offsets = set()
 
         # --------------------------------------------------
         # Mode + Sound Config
@@ -331,7 +339,38 @@ class PassthroughRO(Operations):
         ])
         self._log_f.flush()
 
-    def _log_decision(self, path, offset, size, phase, confidence, decay_rate, seek_delta, prefetch, prefetch_offset):
+    def _is_in_cache(self, full_path, offset, size):
+        """
+        Returns 1 if all pages covering [offset, offset+size) are resident in the
+        page cache, 0 if any are missing, -1 if the check could not be performed.
+        Uses mincore() which is available on both Linux and macOS.
+        """
+        page_size = 4096
+        page_start = (offset // page_size) * page_size
+        check_len = (offset - page_start) + size
+        try:
+            file_size = os.path.getsize(full_path)
+            if page_start >= file_size:
+                return 0
+            actual_len = min(check_len, file_size - page_start)
+            num_pages = (actual_len + page_size - 1) // page_size
+            libc = ctypes.CDLL(ctypes.util.find_library('c'), use_errno=True)
+            with open(full_path, 'rb') as f:
+                mm = _mmap.mmap(f.fileno(), actual_len, access=_mmap.ACCESS_READ, offset=page_start)
+                vec = (ctypes.c_ubyte * num_pages)()
+                ret = libc.mincore(
+                    ctypes.c_void_p(ctypes.addressof(ctypes.c_char.from_buffer(mm))),
+                    ctypes.c_size_t(actual_len),
+                    vec,
+                )
+                mm.close()
+            if ret != 0:
+                return -1
+            return 1 if all(v & 1 for v in vec) else 0
+        except Exception:
+            return -1
+
+    def _log_decision(self, path, offset, size, phase, confidence, decay_rate, seek_delta, prefetch, prefetch_offset, cache_hit, false_negative):
         """
         Write one row to decisions.csv capturing the phase detection result,
         confidence score, decay rate, seek distance, and the prefetch decision made for this read.
@@ -345,7 +384,8 @@ class PassthroughRO(Operations):
                 phase, f"{confidence:.4f}", f"{decay_rate:.4f}", seek_delta, int(prefetch),
                 prefetch_offset if prefetch else "",
                 self.prefetch_size if prefetch else "",
-                self.prefetch_depth
+                self.prefetch_depth,
+                cache_hit, false_negative,
             ])
         self._decision_f.flush()
 
@@ -810,11 +850,11 @@ class PassthroughRO(Operations):
           9. Return the data to the calling application.
         """
         # Step 1: perform the real read.
-        # lseek to the requested offset, then read the requested bytes.
-        # actual_offset captures the confirmed position after seeking
-        # (should equal offset, but we use the confirmed value for accuracy).
+        # Check cache status before the read so we capture whether the data was
+        # already resident (cache_hit=1) or had to be fetched from disk (cache_hit=0).
         os.lseek(fh, offset, os.SEEK_SET)
         actual_offset = os.lseek(fh, 0, os.SEEK_CUR)
+        cache_hit = self._is_in_cache(self._full(path), actual_offset, size)
         data = os.read(fh, size)
 
         # Step 2: log the raw access before any analysis.
@@ -830,6 +870,7 @@ class PassthroughRO(Operations):
                 self.confidence_history.clear()
                 self.prefetch_history.clear()
                 self.prev_confidence = 0.0
+                self._suppressed_offsets.clear()
 
             # Step 3b: measure seek distance before appending the current read.
             # 0 means contiguous/sequential; large values indicate random jumps.
@@ -867,6 +908,10 @@ class PassthroughRO(Operations):
         prefetch = False
         prefetch_offset = None
 
+        # Check if this read lands at an offset we previously suppressed in adaptive mode.
+        false_negative = 1 if (path, actual_offset) in self._suppressed_offsets else 0
+        self._suppressed_offsets.discard((path, actual_offset))
+
         if self.prefetch_enabled and len(data) > 0:
 
             # No Prefetching — control baseline: never issue read-ahead.
@@ -897,6 +942,9 @@ class PassthroughRO(Operations):
                 # Sequential prefetch: warm the block immediately after this read.
                 prefetch_offset = actual_offset + len(data)
                 self._prefetch_next(self._full(path), prefetch_offset, self.prefetch_size)
+            elif self.mode == MODE_ADAPTIVE:
+                # Record the next block as suppressed so we can detect false negatives.
+                self._suppressed_offsets.add((path, actual_offset + len(data)))
 
         # Step 7: record this read's confidence and prefetch decision for sonification.
         with self._state_lock:
@@ -904,7 +952,7 @@ class PassthroughRO(Operations):
             self.prefetch_history.append(prefetch)
 
         # Step 8: log the full decision record (phase, confidence, decay_rate, prefetch) to CSV.
-        self._log_decision(path, actual_offset, len(data), phase, confidence, decay_rate, seek_delta, prefetch, prefetch_offset)
+        self._log_decision(path, actual_offset, len(data), phase, confidence, decay_rate, seek_delta, prefetch, prefetch_offset, cache_hit, false_negative)
 
         # Step 9: return the data to the application that made the read() call.
         return data
