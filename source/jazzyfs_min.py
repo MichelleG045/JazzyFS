@@ -356,7 +356,7 @@ class PassthroughRO(Operations):
             num_pages = (actual_len + page_size - 1) // page_size
             libc = ctypes.CDLL(ctypes.util.find_library('c'), use_errno=True)
             with open(full_path, 'rb') as f:
-                mm = _mmap.mmap(f.fileno(), actual_len, access=_mmap.ACCESS_READ, offset=page_start)
+                mm = _mmap.mmap(f.fileno(), actual_len, access=_mmap.ACCESS_COPY, offset=page_start)
                 vec = (ctypes.c_ubyte * num_pages)()
                 ret = libc.mincore(
                     ctypes.c_void_p(ctypes.addressof(ctypes.c_char.from_buffer(mm))),
