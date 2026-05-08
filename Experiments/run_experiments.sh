@@ -22,7 +22,7 @@ LOG_DECISIONS="logs/decisions.csv"
 if [[ "$(uname)" == "Darwin" ]]; then PLATFORM="apfs"; else PLATFORM="linux"; fi
 
 MODES=("none" "baseline" "adaptive")
-WORKLOADS=("sequential" "random" "phase_change" "tar_workload" "python_import" "cache_lookup_workload" "concurrent" "strided")
+WORKLOADS=("sequential" "random" "phase_change" "gradual_drift" "seek_suppression" "tar_workload" "python_import" "cache_lookup_workload")
 RUNS=20
 JAZZYFS_PID=
 
@@ -39,7 +39,7 @@ _workload_script() {
 
 _reset_logs() {
     echo "run_index,run_label,mode,workload,seq,timestamp,path,offset,size" > "$LOG_ACCESS"
-    echo "run_index,run_label,mode,workload,timestamp,path,offset,size,phase,confidence,decay_rate,prefetch,prefetch_offset,prefetch_size,prefetch_depth" > "$LOG_DECISIONS"
+    echo "run_index,run_label,mode,workload,timestamp,path,offset,size,phase,confidence,decay_rate,seek_delta,prefetch,prefetch_offset,prefetch_size,prefetch_depth" > "$LOG_DECISIONS"
 }
 
 _mount_jazzyfs() {

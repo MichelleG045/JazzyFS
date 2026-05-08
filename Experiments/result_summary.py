@@ -23,11 +23,11 @@ WORKLOADS = [
     "sequential",
     "random",
     "phase_change",
+    "gradual_drift",
+    "seek_suppression",
     "tar_workload",
     "python_import",
     "cache_lookup_workload",
-    "concurrent",
-    "strided",
 ]
 
 
@@ -80,28 +80,34 @@ def summarize_decisions():
                             mode = row["mode"]
                             prefetch = int(row["prefetch"])
                             confidence = float(row["confidence"])
+                            seek_delta = int(row.get("seek_delta") or 0)
+                            seek_suppressed = 1 if row.get("phase") == "seek-suppressed" else 0
                         except (ValueError, KeyError):
                             continue
 
-                        data[(workload, mode)].append((prefetch, confidence))
+                        data[(workload, mode)].append((prefetch, confidence, seek_delta, seek_suppressed))
                         run_counts[(workload, mode)].add(run_name)
 
     with open(DECISION_OUTPUT, "w", newline="") as f:
         writer = csv.writer(f)
         writer.writerow([
             "workload", "mode", "runs",
-            "avg_prefetch_rate", "avg_confidence", "std_confidence"
+            "avg_prefetch_rate", "avg_confidence", "std_confidence",
+            "avg_seek_delta", "seek_suppressed_rate"
         ])
 
         for (workload, mode), values in sorted(data.items()):
-            avg_prefetch = sum(p for p, _ in values) / len(values)
-            confidences = [c for _, c in values]
+            avg_prefetch = sum(p for p, _, _, _ in values) / len(values)
+            confidences = [c for _, c, _, _ in values]
             avg_confidence = sum(confidences) / len(confidences)
             std_confidence = statistics.stdev(confidences) if len(confidences) > 1 else 0.0
+            avg_seek_delta = sum(s for _, _, s, _ in values) / len(values)
+            seek_suppressed_rate = sum(ss for _, _, _, ss in values) / len(values)
             runs = len(run_counts[(workload, mode)])
             writer.writerow([
                 workload, mode, runs,
-                f"{avg_prefetch:.2f}", f"{avg_confidence:.4f}", f"{std_confidence:.4f}"
+                f"{avg_prefetch:.2f}", f"{avg_confidence:.4f}", f"{std_confidence:.4f}",
+                f"{avg_seek_delta:.1f}", f"{seek_suppressed_rate:.3f}"
             ])
 
     print(f"[OK] Saved decision summary to {DECISION_OUTPUT}")

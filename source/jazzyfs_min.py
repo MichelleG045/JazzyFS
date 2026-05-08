@@ -55,8 +55,14 @@ MODE_BASELINE = "baseline"
 
 # Confidence-guided prefetching: only prefetch when the recent access pattern
 # is measurably sequential AND our confidence score meets the threshold.
-# This is the research contribution of JazzyFS.
+# JazzyFS additionally suppresses prefetching on abrupt confidence decay and
+# large seek jumps.
 MODE_ADAPTIVE = "adaptive"
+
+# Large random jumps are an actionable signal that prefetched data is likely to
+# be wasted. Adaptive mode suppresses prefetching whenever the byte gap between
+# the previous read end and current read start exceeds this threshold.
+SEEK_SUPPRESS_THRESHOLD = int(os.environ.get("JAZZYFS_SEEK_SUPPRESS_THRESHOLD", str(1024 * 1024)))
 
 # --------------------------------------------------
 # Musical Frequencies
@@ -191,26 +197,42 @@ class PassthroughRO(Operations):
 
         os.makedirs(os.path.dirname(self.log_path), exist_ok=True)
 
+        access_header = [
+            "run_index", "run_label", "mode", "workload",
+            "seq", "timestamp", "path", "offset", "size"
+        ]
+        decision_header = [
+            "run_index", "run_label", "mode", "workload",
+            "timestamp", "path", "offset", "size",
+            "phase", "confidence", "decay_rate", "seek_delta",
+            "prefetch", "prefetch_offset", "prefetch_size", "prefetch_depth"
+        ]
+
+        def _prepare_log(path, expected_header):
+            if not os.path.exists(path) or os.path.getsize(path) == 0:
+                return True
+            with open(path, newline="") as f:
+                current_header = next(csv.reader(f), [])
+            if current_header == expected_header:
+                return False
+            stamp = time.strftime("%Y%m%d-%H%M%S")
+            os.replace(path, f"{path}.legacy-{stamp}")
+            return True
+
         # Open both CSV files in append mode so multiple runs accumulate in the
-        # same file. Write the header row only if the file is new/empty.
-        write_access_header = not os.path.exists(self.log_path) or os.path.getsize(self.log_path) == 0
+        # same file. If the schema changed, archive the stale log first so new
+        # rows do not shift under old column names.
+        write_access_header = _prepare_log(self.log_path, access_header)
         self._log_f = open(self.log_path, "a", newline="")
         self._log_writer = csv.writer(self._log_f)
         if write_access_header:
-            self._log_writer.writerow([
-                "run_index", "run_label", "mode", "workload",
-                "seq", "timestamp", "path", "offset", "size"
-            ])
+            self._log_writer.writerow(access_header)
 
-        write_decision_header = not os.path.exists(self.decision_log_path) or os.path.getsize(self.decision_log_path) == 0
+        write_decision_header = _prepare_log(self.decision_log_path, decision_header)
         self._decision_f = open(self.decision_log_path, "a", newline="")
         self._decision_writer = csv.writer(self._decision_f)
         if write_decision_header:
-            self._decision_writer.writerow([
-                "run_index", "run_label", "mode", "workload",
-                "timestamp", "path", "offset", "size",
-                "phase", "confidence", "decay_rate", "prefetch", "prefetch_offset", "prefetch_size", "prefetch_depth"
-            ])
+            self._decision_writer.writerow(decision_header)
 
         # --------------------------------------------------
         # Shared State
@@ -282,6 +304,7 @@ class PassthroughRO(Operations):
         if self.workload_name:
             print(f"[JazzyFS] Workload       = {self.workload_name}")
         print(f"[JazzyFS] Prefetch Depth = {self.prefetch_depth}")
+        print(f"[JazzyFS] Seek Threshold = {SEEK_SUPPRESS_THRESHOLD} bytes")
         print(f"[JazzyFS] Sound          = {self.sound_enabled}")
         print(f"[JazzyFS] Logging        = {self.log_path}")
 
@@ -308,10 +331,10 @@ class PassthroughRO(Operations):
         ])
         self._log_f.flush()
 
-    def _log_decision(self, path, offset, size, phase, confidence, decay_rate, prefetch, prefetch_offset):
+    def _log_decision(self, path, offset, size, phase, confidence, decay_rate, seek_delta, prefetch, prefetch_offset):
         """
         Write one row to decisions.csv capturing the phase detection result,
-        confidence score, decay rate, and the prefetch decision made for this read.
+        confidence score, decay rate, seek distance, and the prefetch decision made for this read.
         This is the primary data source for the experiment analysis scripts.
         decay_rate is the drop in confidence since the previous read — positive
         values indicate falling confidence, zero indicates stable or rising.
@@ -319,7 +342,7 @@ class PassthroughRO(Operations):
         self._decision_writer.writerow([
                 self.run_index, self.run_label, self.mode, self.workload_name,
                 time.time(), path, offset, size,
-                phase, f"{confidence:.4f}", f"{decay_rate:.4f}", int(prefetch),
+                phase, f"{confidence:.4f}", f"{decay_rate:.4f}", seek_delta, int(prefetch),
                 prefetch_offset if prefetch else "",
                 self.prefetch_size if prefetch else "",
                 self.prefetch_depth
@@ -402,30 +425,6 @@ class PassthroughRO(Operations):
         # max(1, ...) guards against the edge case of a single-element window.
         return matches / max(1, len(recent) - 1)
 
-    def _detect_stride(self):
-        """
-        Detect a period-2 stride pattern: alternating deltas +n, +m where n != m.
-        Requires PHASE_WINDOW (5) trace entries, giving 4 consecutive deltas to check.
-        Returns the predicted next offset delta if the pattern is confirmed, else None.
-
-        Example: reads at offsets 0, 6144, 16384, 22528, 32768 → deltas 6144, 10240, 6144, 10240.
-        d[0]==d[2] and d[1]==d[3] and d[0]!=d[1] → period-2 confirmed.
-        After the last delta d[3] (== d[1]), next alternates back to d[0].
-
-        Neither Linux readahead nor sequential confidence scoring can identify this
-        pattern: confidence stays near 0.0 because the transitions are not contiguous.
-        """
-        if len(self.trace) < PHASE_WINDOW:
-            return None
-        recent = list(self.trace)[-PHASE_WINDOW:]
-        deltas = [recent[i]["offset"] - recent[i - 1]["offset"] for i in range(1, len(recent))]
-        if len(deltas) < 4:
-            return None
-        d = deltas
-        if d[0] == d[2] and d[1] == d[3] and d[0] != d[1] and d[0] > 0 and d[1] > 0:
-            return d[0]
-        return None
-
     def _prefetch_next(self, full_path, next_offset, size):
         """
         Warm the OS page cache by speculatively reading ahead of the current
@@ -475,6 +474,32 @@ class PassthroughRO(Operations):
                 compressed.append(phase)
 
         return compressed
+
+    def _play_seek_tone(self, seek_delta):
+        """
+        Play a short real-time tone for seek observability.
+
+        Silence means sequential access. Larger seek distances map
+        logarithmically to higher pitches so operators can hear random jumps
+        while the workload is still running.
+        """
+        if not self.sound_enabled or seek_delta <= 0:
+            return
+
+        # Map 4 KB..1 GB to roughly 150..1800 Hz.
+        import math
+        min_seek = 4096
+        max_seek = 1024 * 1024 * 1024
+        clamped = min(max(seek_delta, min_seek), max_seek)
+        ratio = math.log(clamped / min_seek) / math.log(max_seek / min_seek)
+        freq = 150 + ratio * (1800 - 150)
+
+        subprocess.Popen(
+            ["play", "-q", "-n", "synth", "0.08", "sine", f"{freq:.2f}", "vol", "0.20"],
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
 
     def _play_segment(self, tempo, vol, avg_confidence, root_idx=0):
         """
@@ -773,8 +798,9 @@ class PassthroughRO(Operations):
              a. Reset trace if > 2 s have passed since the last read
                 (separates workload runs without requiring an explicit reset).
              b. Append this event to the sliding-window trace.
-             c. Run phase detection and update phase_history.
-             d. Update last_read_time for the idle detector.
+             c. Measure seek distance from the previous read.
+             d. Run phase detection and update phase_history.
+             e. Update last_read_time for the idle detector.
           4. Run confidence scoring (reads the same trace, no lock needed here
              since we're in the single-threaded FUSE dispatcher).
           5. Make the prefetch decision based on mode + phase + confidence.
@@ -805,18 +831,29 @@ class PassthroughRO(Operations):
                 self.prefetch_history.clear()
                 self.prev_confidence = 0.0
 
-            # Step 3b: record this read event in the sliding-window trace.
+            # Step 3b: measure seek distance before appending the current read.
+            # 0 means contiguous/sequential; large values indicate random jumps.
+            if self.trace:
+                prev = self.trace[-1]
+                prev_end = prev["offset"] + prev["size"]
+                seek_delta = abs(actual_offset - prev_end)
+            else:
+                seek_delta = 0
+
+            # Step 3c: record this read event in the sliding-window trace.
             event = {"t": time.time(), "path": path, "offset": actual_offset, "size": len(data)}
             self.trace.append(event)
 
-            # Step 3c: detect phase and append to history for sonification.
+            # Step 3d: detect phase and append to history for sonification.
             # "unknown" is excluded from history since it carries no signal.
             sonification_phase = self._detect_phase()
             if sonification_phase != "unknown":
                 self.phase_history.append(sonification_phase)
 
-            # Step 3d: record the timestamp so the idle detector can fire after 1 s.
+            # Step 3e: record the timestamp so the idle detector can fire after 1 s.
             self.last_read_time = time.time()
+
+        self._play_seek_tone(seek_delta)
 
         # Steps 4–6: prefetch decision.
         # confidence_scoring reads the trace without modifying it, so no lock needed.
@@ -826,10 +863,6 @@ class PassthroughRO(Operations):
         # Compute single-read confidence drop; a large drop signals an abrupt phase change.
         decay_rate = max(0.0, self.prev_confidence - confidence)
         self.prev_confidence = confidence
-
-        # Stride detection runs only in adaptive mode: checks for a period-2 repeating
-        # delta pattern (+n, +m, +n, +m) that confidence scoring cannot see.
-        stride_delta = self._detect_stride() if self.mode == MODE_ADAPTIVE else None
 
         prefetch = False
         prefetch_offset = None
@@ -847,25 +880,22 @@ class PassthroughRO(Operations):
             # Confidence-Guided Prefetching — the research contribution:
             # only prefetch when the pattern is measurably sequential AND
             # our confidence in that classification meets the threshold.
-            # Decay suppression fires first (abrupt phase change).
-            # Stride detection fires second: if a period-2 stride is confirmed,
-            # prefetch at the predicted stride offset even though confidence is 0.
+            # Seek suppression fires first: if the workload jumps too far,
+            # prefetching is likely wasted even if recent confidence is high.
+            # Decay suppression then catches abrupt phase changes that are not
+            # already explained by a large seek.
             elif self.mode == MODE_ADAPTIVE:
-                if decay_rate >= self.decay_threshold:
+                if seek_delta > SEEK_SUPPRESS_THRESHOLD:
                     prefetch = False
-                elif stride_delta is not None:
-                    prefetch = True
-                    phase = "strided"
+                    phase = "seek-suppressed"
+                elif decay_rate >= self.decay_threshold:
+                    prefetch = False
                 else:
                     prefetch = (phase == "sequential" and confidence >= CONFIDENCE_THRESHOLD)
 
             if prefetch:
-                # Stride-aware: prefetch at the predicted stride offset.
-                # Sequential: prefetch immediately after the current read.
-                prefetch_offset = (
-                    actual_offset + stride_delta if stride_delta is not None
-                    else actual_offset + len(data)
-                )
+                # Sequential prefetch: warm the block immediately after this read.
+                prefetch_offset = actual_offset + len(data)
                 self._prefetch_next(self._full(path), prefetch_offset, self.prefetch_size)
 
         # Step 7: record this read's confidence and prefetch decision for sonification.
@@ -874,7 +904,7 @@ class PassthroughRO(Operations):
             self.prefetch_history.append(prefetch)
 
         # Step 8: log the full decision record (phase, confidence, decay_rate, prefetch) to CSV.
-        self._log_decision(path, actual_offset, len(data), phase, confidence, decay_rate, prefetch, prefetch_offset)
+        self._log_decision(path, actual_offset, len(data), phase, confidence, decay_rate, seek_delta, prefetch, prefetch_offset)
 
         # Step 9: return the data to the application that made the read() call.
         return data

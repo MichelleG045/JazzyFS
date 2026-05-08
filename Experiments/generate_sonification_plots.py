@@ -2,14 +2,14 @@
 """
 generate_sonification_plots.py
 
-Synthesizes audio and generates spectrogram plots for all 18 JazzyFS
-sonification combinations (3 modes × 6 workloads) using known parameters
+Synthesizes audio and generates spectrogram plots for all JazzyFS
+sonification combinations (3 modes × 8 workloads) using known parameters
 from experimental results.
 
 Outputs:
-  results/{platform}/sonification/audio/{mode}_{workload}.wav   — 18 wav files
-  results/{platform}/sonification/plots/{mode}_{workload}.png   — 18 individual plots
-  results/{platform}/sonification/sonification_grid.png         — combined 6×3 grid figure
+  results/{platform}/sonification/audio/{mode}_{workload}.wav
+  results/{platform}/sonification/plots/{mode}_{workload}.png
+  results/{platform}/sonification/sonification_grid.png
 """
 
 import argparse
@@ -58,7 +58,7 @@ _CHROMATIC_ROOTS_HZ = [
     329.63, 349.23, 369.99, 392.00, 415.30, 440.00, 466.16, 493.88, 523.25,
 ]
 
-ROOT_IDX = 0   # C3 — fixed for reproducibility across all 18 combinations
+ROOT_IDX = 0   # C3 — fixed for reproducibility across combinations
 
 # --------------------------------------------------
 # Workload Parameters (from experimental results)
@@ -68,6 +68,8 @@ WORKLOADS = [
     "sequential",
     "random",
     "phase_change",
+    "gradual_drift",
+    "seek_suppression",
     "tar_workload",
     "python_import",
     "cache_lookup_workload",
@@ -77,6 +79,8 @@ SHORT = {
     "sequential":            "Sequential",
     "random":                "Random",
     "phase_change":          "Phase Change",
+    "gradual_drift":         "Gradual Drift",
+    "seek_suppression":      "Seek Suppression",
     "tar_workload":          "Tar",
     "python_import":         "Python Import",
     "cache_lookup_workload": "Cache Lookup",
@@ -86,6 +90,8 @@ WORKLOAD_PARAMS = {
     "sequential":            {"phase": "sequential", "confidence": 0.9994},
     "random":                {"phase": "irregular",  "confidence": 0.0000},
     "phase_change":          {"phase": "mixed",      "confidence": 0.9916},
+    "gradual_drift":         {"phase": "mixed",      "confidence": 0.6500},
+    "seek_suppression":      {"phase": "mixed",      "confidence": 0.7000},
     "tar_workload":          {"phase": "sequential", "confidence": 0.9655},
     "python_import":         {"phase": "irregular",  "confidence": 0.5004},
     "cache_lookup_workload": {"phase": "irregular",  "confidence": 0.0000},
@@ -268,7 +274,7 @@ def plot_individual(audio, mode, workload, path):
 
 
 def plot_grid(all_audio):
-    """6 workloads (rows) × 3 modes (cols), waveform + spectrogram per cell."""
+    """Workloads (rows) × 3 modes (cols), waveform + spectrogram per cell."""
     n_rows = len(WORKLOADS)
     n_cols = len(MODES)
 
@@ -352,7 +358,7 @@ def main():
 
     print("\n[Generating grid figure...]")
     plot_grid(all_audio)
-    print("\n[DONE] All 18 sonification plots and audio files generated.")
+    print(f"\n[DONE] All {len(WORKLOADS) * len(MODES)} sonification plots and audio files generated.")
 
 
 if __name__ == "__main__":

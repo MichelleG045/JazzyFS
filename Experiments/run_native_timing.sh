@@ -28,7 +28,7 @@ trap '[[ "$SYMLINKED" == "1" ]] && rm -f "$MOUNT_DIR" && mkdir -p "$MOUNT_DIR"' 
 
 echo "workload,run,real_sec,user_sec,sys_sec" > "$OUTPUT"
 
-WORKLOADS=("sequential" "random" "phase_change" "tar_workload" "python_import" "cache_lookup_workload")
+WORKLOADS=("sequential" "random" "phase_change" "gradual_drift" "seek_suppression" "tar_workload" "python_import" "cache_lookup_workload")
 
 _workload_script() {
     local w=$1

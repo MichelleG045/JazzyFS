@@ -21,6 +21,8 @@ WORKLOADS=(
     "synthetic/sequential.sh"
     "synthetic/random.sh"
     "synthetic/phase_change.sh"
+    "synthetic/gradual_drift.sh"
+    "synthetic/seek_suppression.sh"
     "real/python_import.sh"
     "real/tar_workload.sh"
     "real/cache_lookup_workload.sh"
@@ -31,7 +33,7 @@ WORKLOADS=(
 reset_logs() {
     mkdir -p "$LOG_DIR"
     echo "run_index,run_label,mode,workload,seq,timestamp,path,offset,size" > "$LOG_ACCESS"
-    echo "run_index,run_label,mode,workload,timestamp,path,offset,size,phase,confidence,prefetch,prefetch_offset,prefetch_size,prefetch_depth" > "$LOG_DECISIONS"
+    echo "run_index,run_label,mode,workload,timestamp,path,offset,size,phase,confidence,decay_rate,seek_delta,prefetch,prefetch_offset,prefetch_size,prefetch_depth" > "$LOG_DECISIONS"
 }
 
 mount_jazzyfs() {

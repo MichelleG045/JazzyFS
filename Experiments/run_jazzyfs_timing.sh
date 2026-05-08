@@ -23,7 +23,7 @@ if [[ "$(uname)" == "Darwin" ]]; then PLATFORM="apfs"; else PLATFORM="linux"; fi
 OUTPUT="results/${PLATFORM}/native/jazzyfs_${MODE}_timing.csv"
 mkdir -p "results/${PLATFORM}/native"
 
-WORKLOADS=("sequential" "random" "phase_change" "tar_workload" "python_import" "cache_lookup_workload")
+WORKLOADS=("sequential" "random" "phase_change" "gradual_drift" "seek_suppression" "tar_workload" "python_import" "cache_lookup_workload")
 
 _workload_script() {
     local w=$1

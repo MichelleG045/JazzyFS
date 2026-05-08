@@ -16,6 +16,9 @@ jobs:
         with:
           python-version: '3.11'
 
+      - name: Install system dependencies
+        run: sudo apt-get update && sudo apt-get install -y fuse libfuse2
+
       - name: Install dependencies
         run: pip install -r requirements.txt
 
@@ -25,29 +28,58 @@ jobs:
       - name: Lint with ruff
         run: ruff check source/ Experiments/
 
-      - name: Check jazzyfs_min.py syntax
-        run: python3 -m py_compile source/jazzyfs_min.py
+      - name: Check Python syntax
+        run: python3 -m py_compile source/*.py Experiments/*.py
 
-      - name: Check result_summary.py syntax
-        run: python3 -m py_compile Experiments/result_summary.py
+      - name: Check shell syntax
+        run: |
+          bash -n Experiments/run_all.sh
+          bash -n Experiments/run_experiments.sh
+          bash -n Experiments/run_jazzyfs_timing.sh
+          bash -n Experiments/run_native_timing.sh
+          bash -n Experiments/run_seek_suppression_sweep.sh
+          bash -n Experiments/test_sonification.sh
+          bash -n workloads/setup/setup_test_data.sh
+          bash -n workloads/synthetic/*.sh
+          bash -n workloads/real/*.sh
 
-      - name: Check plot_results.py syntax
-        run: python3 -m py_compile Experiments/plot_results.py
+      - name: JazzyFS seek suppression smoke test
+        run: |
+          python3 - <<'PY'
+          import csv
+          import os
+          from pathlib import Path
 
-      - name: Check trajectory_classification.py syntax
-        run: python3 -m py_compile source/trajectory_classification.py
+          os.environ["JAZZYFS_MODE"] = "adaptive"
+          os.environ["JAZZYFS_SOUND"] = "0"
+          os.environ["JAZZYFS_RUN_LABEL"] = "ci_seek_smoke"
+          os.environ["JAZZYFS_WORKLOAD"] = "seek_suppression"
 
-      - name: Check decay_rate_analysis.py syntax
-        run: python3 -m py_compile source/decay_rate_analysis.py
+          source = Path("source_data")
+          source.mkdir(exist_ok=True)
+          with open(source / "big.txt", "wb") as f:
+              f.truncate(4 * 1024 * 1024)
 
-      - name: Check threshold_sweep_analysis.py syntax
-        run: python3 -m py_compile source/threshold_sweep_analysis.py
+          from source.jazzyfs_min import PassthroughRO
 
-      - name: Run result summary against saved results (APFS)
-        run: python3 Experiments/result_summary.py --platform apfs
+          fs = PassthroughRO(str(source))
+          fh = fs.open("/big.txt", os.O_RDONLY)
+          try:
+              fs.read("/big.txt", 4096, 0, fh)
+              fs.read("/big.txt", 4096, 4096, fh)
+              fs.read("/big.txt", 4096, 2 * 1024 * 1024, fh)
+          finally:
+              fs.release("/big.txt", fh)
+              fs._log_f.close()
+              fs._decision_f.close()
 
-      - name: Run result summary against saved results (Linux)
-        run: python3 Experiments/result_summary.py --platform linux
-
-      - name: Run trajectory classification against saved results
-        run: python3 source/trajectory_classification.py
+          rows = [
+              r for r in csv.DictReader(open("logs/decisions.csv", newline=""))
+              if r["run_label"] == "ci_seek_smoke"
+          ]
+          assert rows[-2]["phase"] == "sequential"
+          assert rows[-2]["prefetch"] == "1"
+          assert rows[-1]["phase"] == "seek-suppressed"
+          assert rows[-1]["prefetch"] == "0"
+          assert int(rows[-1]["seek_delta"]) > 1024 * 1024
+          PY

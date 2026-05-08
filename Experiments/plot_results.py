@@ -32,9 +32,8 @@ RESULTS_DIR = f"results/{PLATFORM}"
 FIGURES_DIR = os.path.join(RESULTS_DIR, "figures")
 
 WORKLOADS = [
-    "sequential", "random", "phase_change",
+    "sequential", "random", "phase_change", "gradual_drift", "seek_suppression",
     "tar_workload", "python_import", "cache_lookup_workload",
-    "concurrent",
 ]
 MODES  = ["none", "baseline", "adaptive"]
 
@@ -49,10 +48,11 @@ SHORT = {
     "sequential":            "seq",
     "random":                "rand",
     "phase_change":          "phase",
+    "gradual_drift":         "drift",
+    "seek_suppression":      "seek",
     "tar_workload":          "tar",
     "python_import":         "pyimport",
     "cache_lookup_workload": "cache",
-    "concurrent":            "conc",
 }
 
 
@@ -92,6 +92,8 @@ def load_decision_summary():
                     "prefetch_rate":  float(row["avg_prefetch_rate"]),
                     "confidence":     float(row["avg_confidence"]),
                     "std_confidence": float(row["std_confidence"]),
+                    "seek_delta":     float(row.get("avg_seek_delta", 0) or 0),
+                    "seek_suppressed_rate": float(row.get("seek_suppressed_rate", 0) or 0),
                 }
             except (ValueError, KeyError):
                 continue
@@ -225,6 +227,37 @@ def plot_confidence(decisions):
     print(f"[OK] {out}")
 
 
+def plot_seek_suppression(decisions):
+    """Grouped bar: average seek distance and adaptive seek-suppression rate."""
+    fig, ax1 = plt.subplots(figsize=(13, 5))
+    x = np.arange(len(WORKLOADS))
+    seek_bytes = [decisions.get((w, "adaptive"), {}).get("seek_delta", 0) for w in WORKLOADS]
+    suppression = [decisions.get((w, "adaptive"), {}).get("seek_suppressed_rate", 0) for w in WORKLOADS]
+
+    ax1.bar(x, seek_bytes, color="#76b7b2", alpha=0.9, label="avg seek delta")
+    ax1.set_ylabel("Average Seek Delta (bytes)")
+    ax1.set_xticks(x)
+    ax1.set_xticklabels([SHORT[w] for w in WORKLOADS], rotation=15, ha="right")
+    ax1.grid(axis="y", alpha=0.3)
+
+    ax2 = ax1.twinx()
+    ax2.plot(x, suppression, color="#e15759", marker="o", linewidth=2,
+             label="seek-suppressed rate")
+    ax2.set_ylabel("Seek-Suppressed Read Rate")
+    ax2.set_ylim(0, 1.05)
+
+    ax1.set_title("Seek Distance as an Adaptive Prefetch Suppression Signal")
+    lines1, labels1 = ax1.get_legend_handles_labels()
+    lines2, labels2 = ax2.get_legend_handles_labels()
+    ax1.legend(lines1 + lines2, labels1 + labels2, loc="upper left")
+
+    out = os.path.join(FIGURES_DIR, "seek_suppression.png")
+    plt.tight_layout()
+    plt.savefig(out, dpi=150)
+    plt.close()
+    print(f"[OK] {out}")
+
+
 
 # --------------------------------------------------
 # Main
@@ -245,6 +278,7 @@ def main():
     if decisions:
         plot_prefetch_rate(decisions)
         plot_confidence(decisions)
+        plot_seek_suppression(decisions)
 
     print("[DONE] All figures saved.")
 
