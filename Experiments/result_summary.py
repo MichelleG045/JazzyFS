@@ -73,41 +73,57 @@ def summarize_decisions():
                     continue
 
                 with open(decisions, newline="") as f:
-                    reader = csv.DictReader(f)
+                    rows = list(csv.DictReader(f))
 
-                    for row in reader:
-                        try:
-                            mode = row["mode"]
-                            prefetch = int(row["prefetch"])
-                            confidence = float(row["confidence"])
-                            seek_delta = int(row.get("seek_delta") or 0)
-                            seek_suppressed = 1 if row.get("phase") == "seek-suppressed" else 0
-                        except (ValueError, KeyError):
-                            continue
+                prev_fn = False
+                for row in rows:
+                    try:
+                        mode = row["mode"]
+                        prefetch = int(row["prefetch"])
+                        confidence = float(row["confidence"])
+                        seek_delta = int(row.get("seek_delta") or 0)
+                        seek_suppressed = 1 if row.get("phase") == "seek-suppressed" else 0
+                        cache_hit = int(row.get("cache_hit") or 0)
+                        is_fn = row.get("false_negative") == "1"
+                        chain_start_fn = 1 if (is_fn and not prev_fn) else 0
+                        false_negative = 1 if is_fn else 0
+                    except (ValueError, KeyError):
+                        prev_fn = False
+                        continue
 
-                        data[(workload, mode)].append((prefetch, confidence, seek_delta, seek_suppressed))
-                        run_counts[(workload, mode)].add(run_name)
+                    data[(workload, mode)].append((
+                        prefetch, confidence, seek_delta, seek_suppressed,
+                        cache_hit, false_negative, chain_start_fn,
+                    ))
+                    run_counts[(workload, mode)].add(run_name)
+                    prev_fn = is_fn
 
     with open(DECISION_OUTPUT, "w", newline="") as f:
         writer = csv.writer(f)
         writer.writerow([
             "workload", "mode", "runs",
             "avg_prefetch_rate", "avg_confidence", "std_confidence",
-            "avg_seek_delta", "seek_suppressed_rate"
+            "avg_seek_delta", "seek_suppressed_rate",
+            "cache_hit_rate", "false_negative_rate", "chain_start_fn_rate",
         ])
 
         for (workload, mode), values in sorted(data.items()):
-            avg_prefetch = sum(p for p, _, _, _ in values) / len(values)
-            confidences = [c for _, c, _, _ in values]
-            avg_confidence = sum(confidences) / len(confidences)
-            std_confidence = statistics.stdev(confidences) if len(confidences) > 1 else 0.0
-            avg_seek_delta = sum(s for _, _, s, _ in values) / len(values)
-            seek_suppressed_rate = sum(ss for _, _, _, ss in values) / len(values)
+            n = len(values)
+            avg_prefetch         = sum(v[0] for v in values) / n
+            confidences          = [v[1] for v in values]
+            avg_confidence       = sum(confidences) / n
+            std_confidence       = statistics.stdev(confidences) if n > 1 else 0.0
+            avg_seek_delta       = sum(v[2] for v in values) / n
+            seek_suppressed_rate = sum(v[3] for v in values) / n
+            cache_hit_rate       = sum(v[4] for v in values) / n
+            false_negative_rate  = sum(v[5] for v in values) / n
+            chain_start_fn_rate  = sum(v[6] for v in values) / n
             runs = len(run_counts[(workload, mode)])
             writer.writerow([
                 workload, mode, runs,
-                f"{avg_prefetch:.2f}", f"{avg_confidence:.4f}", f"{std_confidence:.4f}",
-                f"{avg_seek_delta:.1f}", f"{seek_suppressed_rate:.3f}"
+                f"{avg_prefetch:.4f}", f"{avg_confidence:.4f}", f"{std_confidence:.4f}",
+                f"{avg_seek_delta:.1f}", f"{seek_suppressed_rate:.4f}",
+                f"{cache_hit_rate:.4f}", f"{false_negative_rate:.4f}", f"{chain_start_fn_rate:.4f}",
             ])
 
     print(f"[OK] Saved decision summary to {DECISION_OUTPUT}")

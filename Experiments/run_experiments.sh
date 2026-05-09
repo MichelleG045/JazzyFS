@@ -73,20 +73,31 @@ trap '_unmount_jazzyfs' EXIT
 
 echo "[Platform] $PLATFORM"
 
+_drop_caches() {
+    sync
+    if [[ -w /proc/sys/vm/drop_caches ]]; then
+        echo 3 > /proc/sys/vm/drop_caches
+    elif command -v sudo &>/dev/null; then
+        echo 3 | sudo tee /proc/sys/vm/drop_caches > /dev/null 2>&1 || true
+    fi
+}
+
 run_index=0
 
-for mode in "${MODES[@]}"; do
+for workload in "${WORKLOADS[@]}"; do
     echo ""
     echo "=============================="
-    echo " Mode: $mode"
+    echo " Workload: $workload"
     echo "=============================="
 
-    for workload in "${WORKLOADS[@]}"; do
-        for run in $(seq 1 $RUNS); do
+    for run in $(seq 1 $RUNS); do
+        for mode in "${MODES[@]}"; do
             run_index=$((run_index + 1))
             run_label="$(printf '%03d_%s_%s_run%02d' "$run_index" "$mode" "$workload" "$run")"
             OUT_DIR="results/${PLATFORM}/${workload}/${mode}/run${run}"
             mkdir -p "$OUT_DIR"
+
+            _drop_caches
 
             _reset_logs
             _mount_jazzyfs "$mode" "$run_index" "$workload" "$run_label"

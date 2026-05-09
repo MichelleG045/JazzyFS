@@ -89,11 +89,14 @@ def load_decision_summary():
         for row in csv.DictReader(f):
             try:
                 data[(row["workload"], row["mode"])] = {
-                    "prefetch_rate":  float(row["avg_prefetch_rate"]),
-                    "confidence":     float(row["avg_confidence"]),
-                    "std_confidence": float(row["std_confidence"]),
-                    "seek_delta":     float(row.get("avg_seek_delta", 0) or 0),
+                    "prefetch_rate":       float(row["avg_prefetch_rate"]),
+                    "confidence":          float(row["avg_confidence"]),
+                    "std_confidence":      float(row["std_confidence"]),
+                    "seek_delta":          float(row.get("avg_seek_delta", 0) or 0),
                     "seek_suppressed_rate": float(row.get("seek_suppressed_rate", 0) or 0),
+                    "cache_hit_rate":      float(row.get("cache_hit_rate", 0) or 0),
+                    "false_negative_rate": float(row.get("false_negative_rate", 0) or 0),
+                    "chain_start_fn_rate": float(row.get("chain_start_fn_rate", 0) or 0),
                 }
             except (ValueError, KeyError):
                 continue
@@ -258,6 +261,62 @@ def plot_seek_suppression(decisions):
     print(f"[OK] {out}")
 
 
+def plot_cache_hit_rate(decisions):
+    """Grouped bar: cache hit rate per workload/mode."""
+    fig, ax = plt.subplots(figsize=(13, 5))
+    x = np.arange(len(WORKLOADS))
+    width = 0.25
+    offsets = [-1, 0, 1]
+
+    for idx, mode in enumerate(MODES):
+        rates = [decisions.get((w, mode), {}).get("cache_hit_rate", 0) for w in WORKLOADS]
+        ax.bar(x + offsets[idx] * width, rates, width,
+               label=mode, color=COLORS[mode], alpha=0.9)
+
+    ax.set_xlabel("Workload")
+    ax.set_ylabel("Cache Hit Rate")
+    ax.set_title("Page Cache Hit Rate by Workload and Mode")
+    ax.set_xticks(x)
+    ax.set_xticklabels([SHORT[w] for w in WORKLOADS], rotation=15, ha="right")
+    ax.set_ylim(0, 1.15)
+    ax.legend()
+    ax.grid(axis="y", alpha=0.3)
+
+    out = os.path.join(FIGURES_DIR, "cache_hit_rate.png")
+    plt.tight_layout()
+    plt.savefig(out, dpi=150)
+    plt.close()
+    print(f"[OK] {out}")
+
+
+def plot_false_negative_rate(decisions):
+    """Stacked bar (adaptive only): chain-start vs cascade false negative rates."""
+    fig, ax = plt.subplots(figsize=(13, 5))
+    x = np.arange(len(WORKLOADS))
+    width = 0.5
+
+    chain_starts = [decisions.get((w, "adaptive"), {}).get("chain_start_fn_rate", 0) for w in WORKLOADS]
+    totals       = [decisions.get((w, "adaptive"), {}).get("false_negative_rate", 0) for w in WORKLOADS]
+    cascades     = [max(0.0, t - c) for t, c in zip(totals, chain_starts)]
+
+    ax.bar(x, chain_starts, width, label="chain-start FN (suppression decision)", color="#e15759", alpha=0.9)
+    ax.bar(x, cascades, width, bottom=chain_starts, label="cascade FN (confidence recovery)", color="#f1ce63", alpha=0.9)
+
+    ax.set_xlabel("Workload")
+    ax.set_ylabel("False Negative Rate (adaptive mode)")
+    ax.set_title("False Negative Breakdown: Suppression Decisions vs Confidence-Recovery Cascade")
+    ax.set_xticks(x)
+    ax.set_xticklabels([SHORT[w] for w in WORKLOADS], rotation=15, ha="right")
+    ax.set_ylim(0, 1.15)
+    ax.legend()
+    ax.grid(axis="y", alpha=0.3)
+
+    out = os.path.join(FIGURES_DIR, "false_negative_breakdown.png")
+    plt.tight_layout()
+    plt.savefig(out, dpi=150)
+    plt.close()
+    print(f"[OK] {out}")
+
 
 # --------------------------------------------------
 # Main
@@ -279,6 +338,8 @@ def main():
         plot_prefetch_rate(decisions)
         plot_confidence(decisions)
         plot_seek_suppression(decisions)
+        plot_cache_hit_rate(decisions)
+        plot_false_negative_rate(decisions)
 
     print("[DONE] All figures saved.")
 
