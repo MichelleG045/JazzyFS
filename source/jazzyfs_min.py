@@ -909,7 +909,9 @@ class PassthroughRO(Operations):
         prefetch_offset = None
 
         # Check if this read lands at an offset we previously suppressed in adaptive mode.
-        false_negative = 1 if (path, actual_offset) in self._suppressed_offsets else 0
+        # Only count as a false negative if actual data was returned — EOF reads (len==0)
+        # are not missed prefetch opportunities and must not be counted.
+        false_negative = 1 if (len(data) > 0 and (path, actual_offset) in self._suppressed_offsets) else 0
         self._suppressed_offsets.discard((path, actual_offset))
 
         if self.prefetch_enabled and len(data) > 0:
@@ -944,6 +946,8 @@ class PassthroughRO(Operations):
                 self._prefetch_next(self._full(path), prefetch_offset, self.prefetch_size)
             elif self.mode == MODE_ADAPTIVE:
                 # Record the next block as suppressed so we can detect false negatives.
+                # Only track non-zero reads; EOF reads at this offset would incorrectly
+                # match the next file opened at the same starting offset.
                 self._suppressed_offsets.add((path, actual_offset + len(data)))
 
         # Step 7: record this read's confidence and prefetch decision for sonification.
