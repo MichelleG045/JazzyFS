@@ -129,63 +129,62 @@ def summarize_decisions():
     print(f"[OK] Saved decision summary to {DECISION_OUTPUT}")
 
 
-def summarize_timing():
-    os.makedirs(NATIVE_DIR, exist_ok=True)
+def _load_timing_data():
+    """Return {mode: {workload: [real_sec, ...]}} from whichever timing files exist."""
+    interleaved_path = os.path.join(NATIVE_DIR, "timing_interleaved.csv")
+    if os.path.exists(interleaved_path):
+        data = {}
+        with open(interleaved_path, newline="") as f:
+            for row in csv.DictReader(f):
+                try:
+                    value = float(row["real_sec"])
+                except (ValueError, KeyError):
+                    continue
+                if value > 0:
+                    data.setdefault(row["mode"], {}).setdefault(row["workload"], []).append(value)
+        return data
 
-    timing_data = {}
+    # Legacy: separate per-mode files named *native*, *none*, *baseline*, *adaptive*.
+    mode_tag = {"native": "native", "none": "none", "baseline": "baseline", "adaptive": "adaptive"}
+    data = {}
     for filename in sorted(os.listdir(NATIVE_DIR)):
         if not filename.endswith(".csv") or "summary" in filename:
             continue
+        for tag, mode in mode_tag.items():
+            if tag in filename and (tag != "native" or "jazzyfs" not in filename):
+                data[mode] = read_timing_file(os.path.join(NATIVE_DIR, filename))
+                break
+    return data
 
-        filepath = os.path.join(NATIVE_DIR, filename)
-        if "native" in filename and "jazzyfs" not in filename:
-            mode = "native"
-        elif "none" in filename:
-            mode = "none"
-        elif "baseline" in filename:
-            mode = "baseline"
-        elif "adaptive" in filename:
-            mode = "adaptive"
-        else:
-            continue
 
-        timing_data[mode] = read_timing_file(filepath)
+def summarize_timing():
+    os.makedirs(NATIVE_DIR, exist_ok=True)
+    timing_data = _load_timing_data()
 
     with open(TIMING_OUTPUT, "w", newline="") as out:
         writer = csv.writer(out)
         writer.writerow([
             "workload", "mode", "n",
             "avg_real", "std_real", "ci95_real",
-            "min_real", "max_real",
-            "overhead_vs_native"
+            "min_real", "max_real", "overhead_vs_native",
         ])
-
         for workload in WORKLOADS:
             native_times = timing_data.get("native", {}).get(workload)
             if not native_times:
                 continue
-
             native_avg = sum(native_times) / len(native_times)
-
             for mode in ["native", "none", "baseline", "adaptive"]:
                 times = timing_data.get(mode, {}).get(workload)
                 if not times:
                     continue
-
                 n = len(times)
                 avg = sum(times) / n
-                std = statistics.stdev(times) if n > 1 else 0.0
-                ci = ci95(times)
-                minimum = min(times)
-                maximum = max(times)
                 overhead = "0.0%" if mode == "native" else f"{((avg - native_avg) / native_avg) * 100:+.1f}%"
-
                 writer.writerow([
                     workload, mode, n,
-                    f"{avg:.4f}", f"{std:.4f}", f"{ci:.4f}",
-                    f"{minimum:.4f}", f"{maximum:.4f}", overhead
+                    f"{avg:.4f}", f"{statistics.stdev(times) if n > 1 else 0.0:.4f}", f"{ci95(times):.4f}",
+                    f"{min(times):.4f}", f"{max(times):.4f}", overhead,
                 ])
-
 
     print(f"[OK] Saved timing summary to {TIMING_OUTPUT}")
 
