@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-# JazzyFS — read-only FUSE filesystem for studying adaptive prefetching.
+# JazzyFS - read-only FUSE filesystem for studying adaptive prefetching.
 #
 # This file is the entire implementation. It does three things:
 #   1. Acts as a FUSE filesystem: intercepts read() calls from the OS and
@@ -34,8 +34,9 @@ from collections import deque                   # Fixed-size sliding window for 
 PHASE_WINDOW = 5
 
 # The minimum confidence score (0.0 – 1.0) required before adaptive mode will
-# issue a prefetch. At 0.7, at least 3 out of 4 recent transitions must be
-# sequential before we consider the pattern predictable enough to prefetch.
+# issue a prefetch. The confidence threshold is evaluated together with the
+# phase detector, so the default policy requires a fully sequential recent
+# window before adaptive mode prefetches.
 # Controlled at runtime via JAZZYFS_CONFIDENCE_THRESHOLD environment variable.
 CONFIDENCE_THRESHOLD = float(os.environ.get("JAZZYFS_CONFIDENCE_THRESHOLD", "0.7"))
 
@@ -68,11 +69,11 @@ MODE_ADAPTIVE = "adaptive"
 SEEK_SUPPRESS_THRESHOLD = int(os.environ.get("JAZZYFS_SEEK_SUPPRESS_THRESHOLD", str(1024 * 1024)))
 
 # --------------------------------------------------
-# Musical Frequencies
+# Music Frequencies
 # --------------------------------------------------
 
 # Each prefetching mode is mapped to a different musical scale.
-# The scale gives each mode a distinct "sound personality":
+# The scale gives each mode a distinct musical personality:
 #   none     → Major scale      (bright, resolved)
 #   baseline → Natural Minor    (darker, melancholic)
 #   adaptive → Harmonic Minor   (exotic tension/resolution — reflects the
@@ -254,10 +255,6 @@ class PassthroughRO(Operations):
         # How many blocks ahead to read during a prefetch (configurable at mount time).
         self.prefetch_depth = PREFETCH_DEPTH
 
-        # Master switch — always True in current code; allows disabling prefetch
-        # globally without touching mode logic (useful for debugging).
-        self.prefetch_enabled = True
-
         # Confidence decay tracking for real-time abrupt phase change detection.
         # prev_confidence stores the confidence from the previous read so the
         # decay rate (drop per read) can be computed on every call.
@@ -272,13 +269,13 @@ class PassthroughRO(Operations):
         self._suppressed_offsets = set()
 
         # --------------------------------------------------
-        # Mode + Sound Config
+        # Mode + Music Config
         # --------------------------------------------------
 
         # The prefetching algorithm to use. Defaults to adaptive if not set.
         self.mode = os.environ.get("JAZZYFS_MODE", MODE_ADAPTIVE)
 
-        # Whether to play audio after each workload completes.
+        # Whether to play music after each workload completes.
         self.sound_enabled = os.environ.get("JAZZYFS_SOUND", "0") == "1"
 
         # --------------------------------------------------
@@ -295,10 +292,6 @@ class PassthroughRO(Operations):
         # to detect when a workload has finished (idle for > 1 second).
         self.last_read_time = time.time()
 
-        # Current position in the scale for melody generation.
-        # Reset to 0 (root note) at the start of each playback session.
-        self.note_index = 0
-
         # True while audio is playing. Prevents overlapping playback sessions.
         self.melody_playing = False
 
@@ -313,11 +306,11 @@ class PassthroughRO(Operations):
             print(f"[JazzyFS] Workload       = {self.workload_name}")
         print(f"[JazzyFS] Prefetch Depth = {self.prefetch_depth}")
         print(f"[JazzyFS] Seek Threshold = {SEEK_SUPPRESS_THRESHOLD} bytes")
-        print(f"[JazzyFS] Sound          = {self.sound_enabled}")
+        print(f"[JazzyFS] Music          = {self.sound_enabled}")
         print(f"[JazzyFS] Logging        = {self.log_path}")
 
         # Start the background thread that listens for workload completion and
-        # triggers audio playback. Only launched when sound is enabled.
+        # triggers music playback. Only launched when music is enabled.
         if self.sound_enabled:
             threading.Thread(target=self._monitor_completion, daemon=True).start()
 
@@ -403,8 +396,7 @@ class PassthroughRO(Operations):
             prev.offset + prev.size == curr.offset
 
         Classification rule:
-            - 'sequential' if nearly all transitions in the window are sequential
-              (allows one miss to handle occasional out-of-order reads)
+            - 'sequential' if every transition in the window is sequential
             - 'irregular'  otherwise
             - 'unknown'    if fewer than 2 reads have been seen yet
 
@@ -413,23 +405,29 @@ class PassthroughRO(Operations):
         if len(self.trace) < 2:
             return "unknown"
 
-        # Take only the most recent PHASE_WINDOW events from the trace.
+        sequential, total = self._recent_transition_counts()
+        if sequential == total:
+            return "sequential"
+
+        return "irregular"
+
+    def _recent_transition_counts(self):
+        """
+        Count sequential transitions in the recent access window.
+
+        Returns (sequential, total), where total is the number of adjacent
+        read-to-read transitions in the current window.
+        """
         recent = list(self.trace)[-PHASE_WINDOW:]
         sequential = 0
 
         for i in range(1, len(recent)):
             prev = recent[i - 1]
             curr = recent[i]
-            # Byte-exact contiguity check: end of previous read == start of current read.
             if prev["offset"] + prev["size"] == curr["offset"]:
                 sequential += 1
 
-        # Lenient threshold: all-but-one transitions must be sequential.
-        # This prevents a single stray read from flipping the label to 'irregular'.
-        if sequential >= len(recent) - 1:
-            return "sequential"
-
-        return "irregular"
+        return sequential, max(1, len(recent) - 1)
 
     def _prediction_confidence(self):
         """
@@ -452,18 +450,8 @@ class PassthroughRO(Operations):
         if len(self.trace) < 2:
             return 0.0
 
-        recent = list(self.trace)[-PHASE_WINDOW:]
-        matches = 0
-
-        for i in range(1, len(recent)):
-            prev = recent[i - 1]
-            curr = recent[i]
-            if prev["offset"] + prev["size"] == curr["offset"]:
-                matches += 1
-
-        # Divide by (window - 1) since that is the number of possible transitions.
-        # max(1, ...) guards against the edge case of a single-element window.
-        return matches / max(1, len(recent) - 1)
+        sequential, total = self._recent_transition_counts()
+        return sequential / total
 
     def _prefetch_next(self, full_path, next_offset, size):
         """
@@ -680,8 +668,6 @@ class PassthroughRO(Operations):
             if not pattern:
                 return
             self.melody_playing = True
-            # Reset to root note at the start of each new playback session.
-            self.note_index = 0
             avg_confidence = sum(self.confidence_history) / max(1, len(self.confidence_history))
             prefetch_rate = sum(self.prefetch_history) / max(1, len(self.prefetch_history))
             # Clear histories now so the next workload's data starts accumulating fresh.
@@ -914,7 +900,7 @@ class PassthroughRO(Operations):
         false_negative = 1 if (len(data) > 0 and (path, actual_offset) in self._suppressed_offsets) else 0
         self._suppressed_offsets.discard((path, actual_offset))
 
-        if self.prefetch_enabled and len(data) > 0:
+        if len(data) > 0:
 
             # No Prefetching — control baseline: never issue read-ahead.
             if self.mode == MODE_NONE:
