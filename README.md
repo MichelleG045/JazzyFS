@@ -36,8 +36,7 @@ Experiments/
   run_all.sh                  — full end-to-end pipeline
   run_experiments.sh          — main experiment runner (all modes, all workloads)
   run_seek_suppression_sweep.sh — seek threshold sweep
-  run_native_timing.sh        — native filesystem timing baseline
-  run_jazzyfs_timing.sh       — JazzyFS timing for one mode
+  run_timing_interleaved.sh   — native and JazzyFS timing in one interleaved run
   result_summary.py           — aggregate timing and decision logs to CSV
   plot_results.py             — generate thesis figures
   generate_sonification_plots.py — generate sonification audio/spectrograms
@@ -136,14 +135,13 @@ This runs all experiments, the seek-threshold sweep, figures, and claim analysis
 
 ```bash
 bash Experiments/run_experiments.sh              # decision + access logs, all modes
-bash Experiments/run_native_timing.sh            # native timing baseline
-bash Experiments/run_jazzyfs_timing.sh adaptive  # JazzyFS timing for one mode
+bash Experiments/run_timing_interleaved.sh       # native + JazzyFS timing
 bash Experiments/run_seek_suppression_sweep.sh   # seek threshold sweep
 python3 Experiments/result_summary.py            # aggregate to CSV
 python3 Experiments/plot_results.py              # generate figures
 python3 Experiments/generate_sonification_plots.py # generate sonification audio/spectrograms
-python3 source/decay_rate_analysis.py            # phase change reaction speed
-python3 source/seek_analysis.py                  # seek suppression results
+python3 Experiments/decay_rate_analysis.py       # phase change reaction speed
+python3 Experiments/seek_analysis.py             # seek suppression results
 ```
 
 ---

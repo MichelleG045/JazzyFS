@@ -17,36 +17,27 @@ echo "  JazzyFS Full Experiment Pipeline"
 echo "========================================"
 echo ""
 
-echo "[1/7] Main experiments (access + decision logs)..."
+echo "[1/5] Main experiments (access + decision logs)..."
 bash Experiments/run_experiments.sh "$SOURCE_DIR" "$MOUNT_DIR"
 
 echo ""
-echo "[2/7] Native timing baseline..."
-bash Experiments/run_native_timing.sh "$SOURCE_DIR" "$MOUNT_DIR"
+echo "[2/5] Interleaved timing baseline + JazzyFS modes..."
+bash Experiments/run_timing_interleaved.sh "$SOURCE_DIR" "$MOUNT_DIR"
 
 echo ""
-echo "[3/7] JazzyFS timing — mode: none..."
-bash Experiments/run_jazzyfs_timing.sh none "$SOURCE_DIR" "$MOUNT_DIR"
-
-echo ""
-echo "[4/7] JazzyFS timing — mode: baseline..."
-bash Experiments/run_jazzyfs_timing.sh baseline "$SOURCE_DIR" "$MOUNT_DIR"
-
-echo ""
-echo "[5/7] JazzyFS timing — mode: adaptive..."
-bash Experiments/run_jazzyfs_timing.sh adaptive "$SOURCE_DIR" "$MOUNT_DIR"
-
-echo ""
-echo "[6/7] Seek suppression threshold sweep..."
+echo "[3/5] Seek suppression threshold sweep..."
 bash Experiments/run_seek_suppression_sweep.sh "$SOURCE_DIR" "$MOUNT_DIR"
 
 echo ""
-echo "[7/7] Summarizing results and generating figures/claim analyses..."
+echo "[4/5] Summarizing results and generating figures..."
 python3 Experiments/result_summary.py
 python3 Experiments/plot_results.py
 python3 Experiments/generate_sonification_plots.py
-python3 source/decay_rate_analysis.py
-python3 source/seek_analysis.py
+
+echo ""
+echo "[5/5] Running claim analyses..."
+python3 Experiments/decay_rate_analysis.py
+python3 Experiments/seek_analysis.py
 
 echo ""
 echo "========================================"

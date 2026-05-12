@@ -1,1 +1,0 @@
-workload,mode,runs,avg_prefetch_rate,avg_confidence,std_confidence,avg_seek_delta,seek_suppressed_rate,cache_hit_rate,false_negative_rate,chain_start_fn_rate
