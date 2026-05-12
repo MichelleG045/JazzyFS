@@ -8,7 +8,7 @@ JazzyFS replaces those hidden heuristics with explicit per-read signals. The cur
 
 1. **Confidence decay rate detection** — if confidence drops sharply in a single read, prefetching stops immediately rather than waiting several reads for the heuristic to catch up
 2. **Seek-distance suppression** — large byte jumps are measured directly and suppress prefetching because speculative sequential reads are unlikely to be useful
-3. **Observability through sonification** — seek distance, phase, confidence, and prefetch mode are mapped to audible signals so operators can hear filesystem behavior
+3. **Observability through sonification** — seek distance, phase, confidence, and prefetch mode are mapped to musical signals so operators can hear filesystem behavior
 
 JazzyFS is implemented as a FUSE filesystem in Python, runs cross-platform on Linux ext4 and macOS APFS, and requires no kernel modification.
 
@@ -29,8 +29,6 @@ JazzyFS is implemented as a FUSE filesystem in Python, runs cross-platform on Li
 ```
 source/
   jazzyfs_min.py              — FUSE filesystem implementation
-  seek_analysis.py             — summarize seek distance and suppression behavior
-  decay_rate_analysis.py       — measure phase change reaction speed
 
 Experiments/
   run_all.sh                  — full end-to-end pipeline
@@ -39,7 +37,10 @@ Experiments/
   run_timing_interleaved.sh   — native and JazzyFS timing in one interleaved run
   result_summary.py           — aggregate timing and decision logs to CSV
   plot_results.py             — generate thesis figures
-  generate_sonification_plots.py — generate sonification audio/spectrograms
+  generate_sonification_plots.py — generate sonification music/spectrograms
+  decay_rate_analysis.py      — measure phase change reaction speed
+  seek_analysis.py            — summarize seek distance and suppression behavior
+  test_sonification.sh        — live sonification smoke test
 
 workloads/
   synthetic/                  — sequential, random, phase_change, gradual_drift, seek_suppression
@@ -58,7 +59,7 @@ results/
 - Python 3.10+
 - `fusepy`
 - macOS: macFUSE — Linux: `libfuse2`
-- SoX (`play` command) for sonification
+- SoX (`play` command) for sonification/music playback
 
 ---
 
@@ -112,7 +113,7 @@ All behavior is controlled via environment variables — no kernel modification 
 | `JAZZYFS_DECAY_THRESHOLD` | `0.25` | Confidence drop that triggers immediate suppression |
 | `JAZZYFS_SEEK_SUPPRESS_THRESHOLD` | `1048576` | Seek distance in bytes that suppresses adaptive prefetching |
 | `JAZZYFS_PREFETCH_DEPTH` | `1` | Blocks to read ahead per prefetch |
-| `JAZZYFS_SOUND` | `0` | `1` enables sonification |
+| `JAZZYFS_SOUND` | `0` | `1` enables sonification/music playback |
 
 Example — run with a more conservative threshold:
 
@@ -139,7 +140,7 @@ bash Experiments/run_timing_interleaved.sh       # native + JazzyFS timing
 bash Experiments/run_seek_suppression_sweep.sh   # seek threshold sweep
 python3 Experiments/result_summary.py            # aggregate to CSV
 python3 Experiments/plot_results.py              # generate figures
-python3 Experiments/generate_sonification_plots.py # generate sonification audio/spectrograms
+python3 Experiments/generate_sonification_plots.py # generate sonification music/spectrograms
 python3 Experiments/decay_rate_analysis.py       # phase change reaction speed
 python3 Experiments/seek_analysis.py             # seek suppression results
 ```
@@ -156,16 +157,16 @@ python3 Experiments/seek_analysis.py             # seek suppression results
 | `results/{platform}/decay_rate_analysis.csv` | Phase change reaction speed per run |
 | `results/{platform}/seek_analysis.csv` | Seek distance and suppression summary |
 | `results/{platform}/seek_suppression_sweep/seek_suppression_sweep.csv` | Seek threshold sweep results |
-| `results/{platform}/sonification/` | Generated audio and spectrograms for observability |
+| `results/{platform}/sonification/` | Generated music and spectrograms for observability |
 | `results/{platform}/figures/` | Thesis figures |
 
 ---
 
 ## Sonification
 
-JazzyFS maps filesystem behavior to sound:
+JazzyFS maps filesystem behavior to music:
 
-- **Seek tone** — non-zero seek distance plays a short tone; larger jumps are higher pitched
+- **Seek tone** — non-zero seek distance plays a short musical tone; larger jumps are higher pitched
 - **Scale** — mode determines the musical scale (adaptive → Harmonic Minor)
 - **Tempo** — sequential access plays fast, irregular access plays slow
 - **Melody direction** — high confidence ascends, low confidence descends

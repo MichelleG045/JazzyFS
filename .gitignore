@@ -5,3 +5,5 @@ mnt/
 mount/
 logs/
 .DS_Store
+.claude/
+.ruff_cache/
