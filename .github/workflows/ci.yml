@@ -35,8 +35,7 @@ jobs:
         run: |
           bash -n Experiments/run_all.sh
           bash -n Experiments/run_experiments.sh
-          bash -n Experiments/run_jazzyfs_timing.sh
-          bash -n Experiments/run_native_timing.sh
+          bash -n Experiments/run_timing_interleaved.sh
           bash -n Experiments/run_seek_suppression_sweep.sh
           bash -n Experiments/test_sonification.sh
           bash -n workloads/setup/setup_test_data.sh
