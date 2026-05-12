@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Python import workload: reads many small scattered files through JazzyFS mount
-# Simulates interpreter startup / developer environment (random access pattern)
+# Python source-file scan workload: reads many small .py files through JazzyFS.
+# This approximates metadata/source access during interpreter or developer-tool startup.
 find mount/pyfiles/ -name "*.py" | sort | xargs cat > /dev/null

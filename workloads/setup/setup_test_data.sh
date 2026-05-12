@@ -7,7 +7,7 @@ set -euo pipefail
 SOURCE_DIR="${1:-source_data}"
 mkdir -p "$SOURCE_DIR"
 
-echo "[1/3] Creating big.txt for sequential/random/phase_change workloads..."
+echo "[1/3] Creating big.txt for synthetic and cache-lookup workloads..."
 dd if=/dev/urandom bs=1M count=100 of="$SOURCE_DIR/big.txt" status=none
 echo "  Created big.txt (100 MB)"
 
