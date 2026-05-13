@@ -30,7 +30,7 @@ JazzyFS is implemented as a FUSE filesystem in Python, runs cross-platform on Li
 source/
   jazzyfs.py                  — FUSE filesystem implementation
 
-Experiments/
+experiments/
   run_all.sh                  — full end-to-end pipeline
   run_experiments.sh          — main experiment runner (all modes, all workloads)
   run_seek_suppression_sweep.sh — seek threshold sweep
@@ -129,20 +129,20 @@ JAZZYFS_MODE=adaptive JAZZYFS_CONFIDENCE_THRESHOLD=0.9 JAZZYFS_SOUND=0 \
 Run the full pipeline:
 
 ```bash
-bash Experiments/run_all.sh
+bash experiments/run_all.sh
 ```
 
 This runs all experiments, the seek-threshold sweep, figures, and claim analysis scripts. Individual steps:
 
 ```bash
-bash Experiments/run_experiments.sh              # decision + access logs, all modes
-bash Experiments/run_timing_interleaved.sh       # native + JazzyFS timing
-bash Experiments/run_seek_suppression_sweep.sh   # seek threshold sweep
-python3 Experiments/result_summary.py            # aggregate to CSV
-python3 Experiments/plot_results.py              # generate figures
-python3 Experiments/generate_sonification_plots.py # generate sonification music/spectrograms
-python3 Experiments/decay_rate_analysis.py       # phase change reaction speed
-python3 Experiments/seek_analysis.py             # seek suppression results
+bash experiments/run_experiments.sh              # decision + access logs, all modes
+bash experiments/run_timing_interleaved.sh       # native + JazzyFS timing
+bash experiments/run_seek_suppression_sweep.sh   # seek threshold sweep
+python3 experiments/result_summary.py            # aggregate to CSV
+python3 experiments/plot_results.py              # generate figures
+python3 experiments/generate_sonification_plots.py # generate sonification music/spectrograms
+python3 experiments/decay_rate_analysis.py       # phase change reaction speed
+python3 experiments/seek_analysis.py             # seek suppression results
 ```
 
 ---

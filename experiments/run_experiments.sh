@@ -5,8 +5,8 @@ set -euo pipefail
 # Auto-detects platform and writes to results/linux/ or results/apfs/.
 # Produces: results/{platform}/{workload}/{workload}_{mode}_run{n}/access.csv + decisions.csv
 #
-# Usage: bash Experiments/run_experiments.sh [source_dir] [mount_point]
-# Example: bash Experiments/run_experiments.sh source_data mount
+# Usage: bash experiments/run_experiments.sh [source_dir] [mount_point]
+# Example: bash experiments/run_experiments.sh source_data mount
 #
 # Prerequisites:
 #   1. Run workloads/setup/setup_test_data.sh first to create source_data/
@@ -119,5 +119,5 @@ done
 trap - EXIT
 
 echo ""
-echo "[DONE] Experiments complete."
+echo "[DONE] experiments complete."
 echo "Results in results/${PLATFORM}/"

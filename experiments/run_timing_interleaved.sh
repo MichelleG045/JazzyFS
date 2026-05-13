@@ -6,7 +6,7 @@ set -euo pipefail
 # Cache is dropped before every run. JazzyFS is mounted/unmounted fresh per run.
 # Outputs: results/{platform}/native/{mode}_timing_interleaved.csv
 #
-# Usage: bash Experiments/run_timing_interleaved.sh [source_dir] [mount_point]
+# Usage: bash experiments/run_timing_interleaved.sh [source_dir] [mount_point]
 
 SOURCE_DIR="${1:-source_data}"
 MOUNT_DIR="${2:-mount}"

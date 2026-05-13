@@ -23,18 +23,18 @@ jobs:
         run: pip install -r requirements.txt
 
       - name: Lint with ruff
-        run: ruff check source/ Experiments/
+        run: ruff check source/ experiments/
 
       - name: Check Python syntax
-        run: python3 -m py_compile source/*.py Experiments/*.py
+        run: python3 -m py_compile source/*.py experiments/*.py
 
       - name: Check shell syntax
         run: |
-          bash -n Experiments/run_all.sh
-          bash -n Experiments/run_experiments.sh
-          bash -n Experiments/run_timing_interleaved.sh
-          bash -n Experiments/run_seek_suppression_sweep.sh
-          bash -n Experiments/test_sonification.sh
+          bash -n experiments/run_all.sh
+          bash -n experiments/run_experiments.sh
+          bash -n experiments/run_timing_interleaved.sh
+          bash -n experiments/run_seek_suppression_sweep.sh
+          bash -n experiments/test_sonification.sh
           bash -n workloads/setup/setup_test_data.sh
           bash -n workloads/synthetic/*.sh
           bash -n workloads/real/*.sh
