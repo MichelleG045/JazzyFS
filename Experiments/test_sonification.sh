@@ -45,7 +45,7 @@ mount_jazzyfs() {
         JAZZYFS_RUN_INDEX="$CURRENT_RUN_INDEX" \
         JAZZYFS_RUN_LABEL="$CURRENT_RUN_LABEL" \
         JAZZYFS_WORKLOAD="$CURRENT_WORKLOAD" \
-        "$VENV/bin/python3" -u "$REPO/source/jazzyfs_min.py" "$SOURCE" "$MOUNT" \
+        "$VENV/bin/python3" -u "$REPO/source/jazzyfs.py" "$SOURCE" "$MOUNT" \
         > /tmp/jazzyfs_test.log 2>&1 &
     JAZZYFS_PID=$!
     # Wait for mount to become accessible

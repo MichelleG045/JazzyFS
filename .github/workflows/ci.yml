@@ -56,7 +56,7 @@ jobs:
           with open(source / "big.txt", "wb") as f:
               f.truncate(4 * 1024 * 1024)
 
-          from source.jazzyfs_min import PassthroughRO
+          from source.jazzyfs import PassthroughRO
 
           fs = PassthroughRO(str(source))
           fh = fs.open("/big.txt", os.O_RDONLY)

@@ -33,7 +33,7 @@ PLATFORM = _args.platform or ("apfs" if platform.system() == "Darwin" else "linu
 OUT_DIR = os.path.join("results", PLATFORM, "sonification")
 
 # --------------------------------------------------
-# Audio Constants (mirrored from jazzyfs_min.py)
+# Audio Constants (mirrored from jazzyfs.py)
 # --------------------------------------------------
 
 SAMPLE_RATE = 44100

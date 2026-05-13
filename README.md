@@ -28,7 +28,7 @@ JazzyFS is implemented as a FUSE filesystem in Python, runs cross-platform on Li
 
 ```
 source/
-  jazzyfs_min.py              — FUSE filesystem implementation
+  jazzyfs.py                  — FUSE filesystem implementation
 
 Experiments/
   run_all.sh                  — full end-to-end pipeline
@@ -81,7 +81,7 @@ Mount in adaptive mode:
 
 ```bash
 mkdir -p mount
-JAZZYFS_MODE=adaptive JAZZYFS_SOUND=0 python3 source/jazzyfs_min.py source_data mount
+JAZZYFS_MODE=adaptive JAZZYFS_SOUND=0 python3 source/jazzyfs.py source_data mount
 ```
 
 Run a workload in another terminal:
@@ -119,7 +119,7 @@ Example — run with a more conservative threshold:
 
 ```bash
 JAZZYFS_MODE=adaptive JAZZYFS_CONFIDENCE_THRESHOLD=0.9 JAZZYFS_SOUND=0 \
-  python3 source/jazzyfs_min.py source_data mount
+  python3 source/jazzyfs.py source_data mount
 ```
 
 ---

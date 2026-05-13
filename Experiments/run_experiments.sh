@@ -15,7 +15,7 @@ set -euo pipefail
 
 SOURCE_DIR="${1:-source_data}"
 MOUNT_DIR="${2:-mount}"
-JAZZYFS="source/jazzyfs_min.py"
+JAZZYFS="source/jazzyfs.py"
 LOG_ACCESS="logs/access.csv"
 LOG_DECISIONS="logs/decisions.csv"
 
