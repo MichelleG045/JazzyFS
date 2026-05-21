@@ -256,20 +256,20 @@ def _plot_one(ax_wave, ax_spec, audio, title,
 
 
 def plot_individual(audio, mode, workload, path):
-    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 5),
+    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(9, 6.5),
                                     gridspec_kw={"height_ratios": [1, 2]})
     title = f"{SHORT[workload]}  |  Mode: {MODE_LABELS[mode]}"
-    _plot_one(ax1, ax2, audio, title, title_fs=13, label_fs=11, tick_fs=10)
+    _plot_one(ax1, ax2, audio, title, title_fs=16, label_fs=14, tick_fs=12)
 
     conf  = WORKLOAD_PARAMS[workload]["confidence"]
     phase = WORKLOAD_PARAMS[workload]["phase"]
     direction = "ascending" if conf >= 0.5 else "descending"
     fig.text(0.01, 0.01,
              f"phase={phase}   confidence={conf:.4f}   melody={direction}",
-             fontsize=9, color="#555555")
+             fontsize=12, color="#555555")
     plt.tight_layout(rect=[0, 0.03, 1, 1])
     os.makedirs(os.path.dirname(path), exist_ok=True)
-    plt.savefig(path, dpi=150, bbox_inches="tight")
+    plt.savefig(path, dpi=220, bbox_inches="tight")
     plt.close()
 
 
@@ -282,7 +282,7 @@ def plot_grid(all_audio):
     fig.suptitle(
         "JazzyFS Sonification — Waveform & Spectrogram\n"
         "Rows: workloads   |   Columns: prefetch modes",
-        fontsize=18, fontweight="bold", y=1.002
+        fontsize=24, fontweight="bold", y=1.002
     )
 
     outer = fig.add_gridspec(n_rows, n_cols, hspace=0.65, wspace=0.35)
@@ -300,13 +300,13 @@ def plot_grid(all_audio):
             direction = "↑" if conf >= 0.5 else "↓"
             title     = f"{SHORT[workload]} / {mode}  {direction} conf={conf:.2f}"
             _plot_one(ax_w, ax_s, audio, title,
-                      title_fs=11, label_fs=9, tick_fs=8)
+                      title_fs=15, label_fs=12, tick_fs=11)
 
             # Row label on left edge
             if col == 0:
-                ax_w.set_ylabel("Amplitude", fontsize=9)
+                ax_w.set_ylabel("Amplitude", fontsize=12)
                 ax_w.annotate(SHORT[workload], xy=(-0.18, 0.5),
-                              xycoords="axes fraction", fontsize=11,
+                              xycoords="axes fraction", fontsize=14,
                               fontweight="bold", ha="center", va="center",
                               rotation=90)
 
@@ -315,13 +315,45 @@ def plot_grid(all_audio):
         first_ax = fig.axes[col * 4]  # 2 axes per cell × col offset
         first_ax.set_title(
             f"— {MODE_LABELS[mode]} —\n{first_ax.get_title()}",
-            fontsize=12, fontweight="bold", pad=5
+            fontsize=16, fontweight="bold", pad=5
         )
 
     path = os.path.join(OUT_DIR, "sonification_grid.png")
     plt.savefig(path, dpi=150, bbox_inches="tight")
     plt.close()
     print(f"[OK] Grid figure → {path}")
+
+
+def plot_mode_grid(all_audio, mode):
+    """Readable 2-column grid for one mode across all workloads."""
+    fig = plt.figure(figsize=(18, 22))
+    fig.suptitle(
+        f"JazzyFS Sonification — {MODE_LABELS[mode]} Mode",
+        fontsize=26, fontweight="bold", y=0.995
+    )
+
+    outer = fig.add_gridspec(4, 2, hspace=0.42, wspace=0.24)
+
+    for idx, workload in enumerate(WORKLOADS):
+        row = idx // 2
+        col = idx % 2
+        audio = all_audio[(mode, workload)]
+        inner = outer[row, col].subgridspec(2, 1,
+                                             height_ratios=[1, 2],
+                                             hspace=0.16)
+        ax_w = fig.add_subplot(inner[0])
+        ax_s = fig.add_subplot(inner[1])
+
+        conf = WORKLOAD_PARAMS[workload]["confidence"]
+        direction = "ascending" if conf >= 0.5 else "descending"
+        title = f"{SHORT[workload]}  |  conf={conf:.2f}, {direction}"
+        _plot_one(ax_w, ax_s, audio, title,
+                  title_fs=18, label_fs=14, tick_fs=12)
+
+    path = os.path.join(OUT_DIR, f"sonification_grid_{mode}.png")
+    plt.savefig(path, dpi=220, bbox_inches="tight")
+    plt.close()
+    print(f"[OK] {mode} grid figure → {path}")
 
 
 # --------------------------------------------------
@@ -358,6 +390,7 @@ def main():
 
     print("\n[Generating grid figure...]")
     plot_grid(all_audio)
+    plot_mode_grid(all_audio, "adaptive")
     print(f"\n[DONE] All {len(WORKLOADS) * len(MODES)} sonification plots and audio files generated.")
 
 

@@ -44,6 +44,18 @@ COLORS = {
     "adaptive": "#59a14f",
 }
 
+PLOT_SIZE = (9, 6.5)
+PLOT_DPI = 220
+
+plt.rcParams.update({
+    "font.size": 13,
+    "axes.titlesize": 16,
+    "axes.labelsize": 14,
+    "xtick.labelsize": 12,
+    "ytick.labelsize": 12,
+    "legend.fontsize": 12,
+})
+
 SHORT = {
     "sequential":            "seq",
     "random":                "rand",
@@ -109,7 +121,7 @@ def load_decision_summary():
 
 def plot_timing_overhead(timing):
     """Grouped bar chart: avg wall-clock time per workload/mode with 95% CI error bars."""
-    fig, ax = plt.subplots(figsize=(13, 5))
+    fig, ax = plt.subplots(figsize=PLOT_SIZE)
     x = np.arange(len(WORKLOADS))
     width = 0.20
     offsets = [-1.5, -0.5, 0.5, 1.5]
@@ -131,14 +143,14 @@ def plot_timing_overhead(timing):
 
     out = os.path.join(FIGURES_DIR, "timing_by_mode.png")
     plt.tight_layout()
-    plt.savefig(out, dpi=150)
+    plt.savefig(out, dpi=PLOT_DPI, bbox_inches="tight")
     plt.close()
     print(f"[OK] {out}")
 
 
 def plot_overhead_percent(timing):
     """Bar chart: % overhead vs native for none/baseline/adaptive."""
-    fig, ax = plt.subplots(figsize=(13, 5))
+    fig, ax = plt.subplots(figsize=PLOT_SIZE)
     x = np.arange(len(WORKLOADS))
     width = 0.25
     offsets = [-1, 0, 1]
@@ -166,14 +178,14 @@ def plot_overhead_percent(timing):
 
     out = os.path.join(FIGURES_DIR, "overhead_percent.png")
     plt.tight_layout()
-    plt.savefig(out, dpi=150)
+    plt.savefig(out, dpi=PLOT_DPI, bbox_inches="tight")
     plt.close()
     print(f"[OK] {out}")
 
 
 def plot_prefetch_rate(decisions):
     """Grouped bar: prefetch rate per workload/mode."""
-    fig, ax = plt.subplots(figsize=(13, 5))
+    fig, ax = plt.subplots(figsize=PLOT_SIZE)
     x = np.arange(len(WORKLOADS))
     width = 0.25
     offsets = [-1, 0, 1]
@@ -194,14 +206,14 @@ def plot_prefetch_rate(decisions):
 
     out = os.path.join(FIGURES_DIR, "prefetch_rate.png")
     plt.tight_layout()
-    plt.savefig(out, dpi=150)
+    plt.savefig(out, dpi=PLOT_DPI, bbox_inches="tight")
     plt.close()
     print(f"[OK] {out}")
 
 
 def plot_confidence(decisions):
     """Grouped bar: avg confidence per workload/mode with std dev error bars."""
-    fig, ax = plt.subplots(figsize=(13, 5))
+    fig, ax = plt.subplots(figsize=PLOT_SIZE)
     x = np.arange(len(WORKLOADS))
     width = 0.25
     offsets = [-1, 0, 1]
@@ -220,19 +232,19 @@ def plot_confidence(decisions):
     ax.set_xticks(x)
     ax.set_xticklabels([SHORT[w] for w in WORKLOADS], rotation=15, ha="right")
     ax.set_ylim(0, 1.15)
-    ax.legend(fontsize=8)
+    ax.legend(fontsize=11)
     ax.grid(axis="y", alpha=0.3)
 
     out = os.path.join(FIGURES_DIR, "confidence_by_workload.png")
     plt.tight_layout()
-    plt.savefig(out, dpi=150)
+    plt.savefig(out, dpi=PLOT_DPI, bbox_inches="tight")
     plt.close()
     print(f"[OK] {out}")
 
 
 def plot_seek_suppression(decisions):
     """Grouped bar: average seek distance and adaptive seek-suppression rate."""
-    fig, ax1 = plt.subplots(figsize=(13, 5))
+    fig, ax1 = plt.subplots(figsize=PLOT_SIZE)
     x = np.arange(len(WORKLOADS))
     seek_bytes = [decisions.get((w, "adaptive"), {}).get("seek_delta", 0) for w in WORKLOADS]
     suppression = [decisions.get((w, "adaptive"), {}).get("seek_suppressed_rate", 0) for w in WORKLOADS]
@@ -256,14 +268,14 @@ def plot_seek_suppression(decisions):
 
     out = os.path.join(FIGURES_DIR, "seek_suppression.png")
     plt.tight_layout()
-    plt.savefig(out, dpi=150)
+    plt.savefig(out, dpi=PLOT_DPI, bbox_inches="tight")
     plt.close()
     print(f"[OK] {out}")
 
 
 def plot_cache_hit_rate(decisions):
     """Grouped bar: cache hit rate per workload/mode."""
-    fig, ax = plt.subplots(figsize=(13, 5))
+    fig, ax = plt.subplots(figsize=PLOT_SIZE)
     x = np.arange(len(WORKLOADS))
     width = 0.25
     offsets = [-1, 0, 1]
@@ -284,14 +296,14 @@ def plot_cache_hit_rate(decisions):
 
     out = os.path.join(FIGURES_DIR, "cache_hit_rate.png")
     plt.tight_layout()
-    plt.savefig(out, dpi=150)
+    plt.savefig(out, dpi=PLOT_DPI, bbox_inches="tight")
     plt.close()
     print(f"[OK] {out}")
 
 
 def plot_false_negative_rate(decisions):
     """Stacked bar (adaptive only): chain-start vs cascade false negative rates."""
-    fig, ax = plt.subplots(figsize=(13, 5))
+    fig, ax = plt.subplots(figsize=PLOT_SIZE)
     x = np.arange(len(WORKLOADS))
     width = 0.5
 
@@ -313,7 +325,7 @@ def plot_false_negative_rate(decisions):
 
     out = os.path.join(FIGURES_DIR, "false_negative_breakdown.png")
     plt.tight_layout()
-    plt.savefig(out, dpi=150)
+    plt.savefig(out, dpi=PLOT_DPI, bbox_inches="tight")
     plt.close()
     print(f"[OK] {out}")
 
