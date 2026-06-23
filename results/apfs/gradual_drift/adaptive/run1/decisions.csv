@@ -1,0 +1,13 @@
+run_index,run_label,mode,workload,timestamp,path,offset,size,phase,confidence,decay_rate,seek_delta,prefetch,prefetch_offset,prefetch_size,prefetch_depth,cache_hit,false_negative
+12,012_adaptive_gradual_drift_run01,adaptive,gradual_drift,1779900420.6484962,/big.txt,0,65536,unknown,0.0000,0.0000,0,0,,,1,0,0
+12,012_adaptive_gradual_drift_run01,adaptive,gradual_drift,1779900420.653455,/big.txt,65536,65536,sequential,1.0000,0.0000,0,1,131072,4096,1,0,1
+12,012_adaptive_gradual_drift_run01,adaptive,gradual_drift,1779900420.6583512,/big.txt,131072,65536,sequential,1.0000,0.0000,0,1,196608,4096,1,0,0
+12,012_adaptive_gradual_drift_run01,adaptive,gradual_drift,1779900420.6633239,/big.txt,196608,65536,sequential,1.0000,0.0000,0,1,262144,4096,1,0,0
+12,012_adaptive_gradual_drift_run01,adaptive,gradual_drift,1779900420.667378,/big.txt,262144,65536,sequential,1.0000,0.0000,0,1,327680,4096,1,0,0
+12,012_adaptive_gradual_drift_run01,adaptive,gradual_drift,1779900420.672346,/big.txt,327680,65536,sequential,1.0000,0.0000,0,1,393216,4096,1,0,0
+12,012_adaptive_gradual_drift_run01,adaptive,gradual_drift,1779900420.677321,/big.txt,393216,65536,sequential,1.0000,0.0000,0,1,458752,4096,1,0,0
+12,012_adaptive_gradual_drift_run01,adaptive,gradual_drift,1779900420.681288,/big.txt,458752,65536,sequential,1.0000,0.0000,0,1,524288,4096,1,0,0
+12,012_adaptive_gradual_drift_run01,adaptive,gradual_drift,1779900420.686489,/big.txt,524288,65536,sequential,1.0000,0.0000,0,1,589824,4096,1,0,0
+12,012_adaptive_gradual_drift_run01,adaptive,gradual_drift,1779900420.691288,/big.txt,589824,65536,sequential,1.0000,0.0000,0,1,655360,4096,1,0,0
+12,012_adaptive_gradual_drift_run01,adaptive,gradual_drift,1779900420.69541,/big.txt,655360,65536,sequential,1.0000,0.0000,0,1,720896,4096,1,0,0
+12,012_adaptive_gradual_drift_run01,adaptive,gradual_drift,1779900420.700345,/big.txt,720896,65536,sequential,1.0000,0.0000,0,1,786432,4096,1,0,0

@@ -119,8 +119,6 @@ CHORD_PROGRESSIONS = {
 }
 
 # All 25 chromatic pitches from C3 to C5 in Hz.
-# At playback time we randomly pick one of the 7 natural notes (C D E F G A B)
-# as the root, so the key changes each session.
 _CHROMATIC_ROOTS_HZ = [
     130.81,  # C3
     138.59,  # C#3
@@ -147,6 +145,16 @@ _CHROMATIC_ROOTS_HZ = [
     466.16,  # Bb4
     493.88,  # B4
     523.25,  # C5
+]
+
+NATURAL_ROOTS = [
+    (0, "C3"),
+    (2, "D3"),
+    (4, "E3"),
+    (5, "F3"),
+    (7, "G3"),
+    (9, "A3"),
+    (11, "B3"),
 ]
 
 def _build_scale_hz(root_hz, intervals):
@@ -277,6 +285,7 @@ class PassthroughRO(Operations):
 
         # Whether to play music after each workload completes.
         self.sound_enabled = os.environ.get("JAZZYFS_SOUND", "0") == "1"
+        self.seek_sound_enabled = os.environ.get("JAZZYFS_SEEK_SOUND", "1") == "1"
 
         # --------------------------------------------------
         # Sonification State
@@ -307,6 +316,7 @@ class PassthroughRO(Operations):
         print(f"[JazzyFS] Prefetch Depth = {self.prefetch_depth}")
         print(f"[JazzyFS] Seek Threshold = {SEEK_SUPPRESS_THRESHOLD} bytes")
         print(f"[JazzyFS] Music          = {self.sound_enabled}")
+        print(f"[JazzyFS] Seek Tones     = {self.seek_sound_enabled}")
         print(f"[JazzyFS] Logging        = {self.log_path}")
 
         # Start the background thread that listens for workload completion and
@@ -511,7 +521,7 @@ class PassthroughRO(Operations):
         logarithmically to higher pitches so operators can hear random jumps
         while the workload is still running.
         """
-        if not self.sound_enabled or seek_delta <= 0:
+        if not self.sound_enabled or not self.seek_sound_enabled or seek_delta <= 0:
             return
 
         # Map 4 KB..1 GB to roughly 150..1800 Hz.
@@ -658,7 +668,7 @@ class PassthroughRO(Operations):
           1. Grab the accumulated phase and confidence history under the lock,
              then immediately clear it (so the next workload starts fresh).
           2. Compress the phase history to a sequence of distinct transitions.
-          3. Pick a random root note (one of the 7 natural notes in C3 octave).
+          3. Choose a natural root note for this playback.
           4. Wait 5 seconds to let any in-flight I/O finish.
           5. For each phase segment, play one audio segment at the matching tempo.
           6. Clear the melody_playing flag when done.
@@ -683,13 +693,7 @@ class PassthroughRO(Operations):
         print(f"[JazzyFS] avg_confidence={avg_confidence:.2f} → {direction}")
         print(f"[JazzyFS] prefetch_rate={prefetch_rate:.2f}")
 
-        # Randomly choose a root note from the 7 natural pitches (C D E F G A B)
-        # so each playback session sounds different even for the same workload.
-        _NATURAL_INDICES = [0, 2, 4, 5, 7, 9, 11]   # positions in _CHROMATIC_ROOTS_HZ
-        _NATURAL_NAMES   = ["C3","D3","E3","F3","G3","A3","B3"]
-        root_bucket = random.randrange(7)
-        root_idx  = _NATURAL_INDICES[root_bucket]
-        root_name = _NATURAL_NAMES[root_bucket]
+        root_idx, root_name = random.choice(NATURAL_ROOTS)
         scale_name = {MODE_NONE: "Major", MODE_BASELINE: "Natural Minor", MODE_ADAPTIVE: "Harmonic Minor"}.get(self.mode, "")
         print(f"[JazzyFS] Root: {root_name}  Scale: {scale_name}  Mode: {self.mode}")
         print("[JazzyFS] Starting in 5 seconds...")

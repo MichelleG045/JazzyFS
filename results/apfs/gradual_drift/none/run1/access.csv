@@ -1,0 +1,13 @@
+run_index,run_label,mode,workload,seq,timestamp,path,offset,size
+10,010_none_gradual_drift_run01,none,gradual_drift,1,1779900416.455714,/big.txt,0,65536
+10,010_none_gradual_drift_run01,none,gradual_drift,2,1779900416.4595819,/big.txt,65536,65536
+10,010_none_gradual_drift_run01,none,gradual_drift,3,1779900416.463656,/big.txt,131072,65536
+10,010_none_gradual_drift_run01,none,gradual_drift,4,1779900416.468544,/big.txt,196608,65536
+10,010_none_gradual_drift_run01,none,gradual_drift,5,1779900416.4726021,/big.txt,262144,65536
+10,010_none_gradual_drift_run01,none,gradual_drift,6,1779900416.4765701,/big.txt,327680,65536
+10,010_none_gradual_drift_run01,none,gradual_drift,7,1779900416.480586,/big.txt,393216,65536
+10,010_none_gradual_drift_run01,none,gradual_drift,8,1779900416.484668,/big.txt,458752,65536
+10,010_none_gradual_drift_run01,none,gradual_drift,9,1779900416.488574,/big.txt,524288,65536
+10,010_none_gradual_drift_run01,none,gradual_drift,10,1779900416.4925098,/big.txt,589824,65536
+10,010_none_gradual_drift_run01,none,gradual_drift,11,1779900416.4966211,/big.txt,655360,65536
+10,010_none_gradual_drift_run01,none,gradual_drift,12,1779900416.500542,/big.txt,720896,65536

@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>JazzyFS Seek-Tone Audio</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      margin: 2rem;
+      line-height: 1.45;
+      color: #1f2933;
+    }
+    table {
+      border-collapse: collapse;
+      width: 100%;
+      margin-top: 1rem;
+    }
+    th, td {
+      border-bottom: 1px solid #d9e2ec;
+      padding: 0.55rem;
+      text-align: left;
+      vertical-align: middle;
+    }
+    th {
+      background: #f0f4f8;
+    }
+    audio {
+      width: 100%;
+      min-width: 220px;
+    }
+    code {
+      background: #f0f4f8;
+      padding: 0.1rem 0.25rem;
+      border-radius: 4px;
+    }
+  </style>
+</head>
+<body>
+  <h1>JazzyFS Real-Time Seek-Tone Audio</h1>
+  <p>
+    These files were generated from adaptive-mode macOS/APFS decision logs for
+    run 1. Zero seek distance is silence. Nonzero seek distances are mapped to
+    short tones between 150 Hz and 1800 Hz.
+  </p>
+
+  <table>
+    <thead>
+      <tr>
+        <th>Workload</th>
+        <th>Audio</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr><td>sequential</td><td><audio controls src="adaptive_sequential_seek_tones.wav"></audio></td></tr>
+      <tr><td>random</td><td><audio controls src="adaptive_random_seek_tones.wav"></audio></td></tr>
+      <tr><td>phase_change</td><td><audio controls src="adaptive_phase_change_seek_tones.wav"></audio></td></tr>
+      <tr><td>gradual_drift</td><td><audio controls src="adaptive_gradual_drift_seek_tones.wav"></audio></td></tr>
+      <tr><td>seek_suppression</td><td><audio controls src="adaptive_seek_suppression_seek_tones.wav"></audio></td></tr>
+      <tr><td>tar_workload</td><td><audio controls src="adaptive_tar_workload_seek_tones.wav"></audio></td></tr>
+      <tr><td>python_import</td><td><audio controls src="adaptive_python_import_seek_tones.wav"></audio></td></tr>
+      <tr><td>cache_lookup_workload</td><td><audio controls src="adaptive_cache_lookup_workload_seek_tones.wav"></audio></td></tr>
+    </tbody>
+  </table>
+</body>
+</html>

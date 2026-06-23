@@ -16,6 +16,7 @@ set -euo pipefail
 SOURCE_DIR="${1:-source_data}"
 MOUNT_DIR="${2:-mount}"
 JAZZYFS="source/jazzyfs.py"
+PYTHON_BIN="${PYTHON:-python3}"
 LOG_ACCESS="logs/access.csv"
 LOG_DECISIONS="logs/decisions.csv"
 
@@ -23,7 +24,7 @@ if [[ "$(uname)" == "Darwin" ]]; then PLATFORM="apfs"; else PLATFORM="linux"; fi
 
 MODES=("none" "baseline" "adaptive")
 WORKLOADS=("sequential" "random" "phase_change" "gradual_drift" "seek_suppression" "tar_workload" "python_import" "cache_lookup_workload")
-RUNS=20
+RUNS="${RUNS:-20}"
 JAZZYFS_PID=
 
 mkdir -p logs
@@ -53,9 +54,16 @@ _mount_jazzyfs() {
         JAZZYFS_RUN_INDEX="$run_index" \
         JAZZYFS_RUN_LABEL="$run_label" \
         JAZZYFS_WORKLOAD="$workload" \
-        python3 "$JAZZYFS" "$SOURCE_DIR" "$MOUNT_DIR" &
+        "$PYTHON_BIN" "$JAZZYFS" "$SOURCE_DIR" "$MOUNT_DIR" &
     JAZZYFS_PID=$!
-    sleep 2
+    for _ in $(seq 1 40); do
+        [[ -e "$MOUNT_DIR/big.txt" ]] && break
+        sleep 0.25
+    done
+    if [[ ! -e "$MOUNT_DIR/big.txt" ]]; then
+        echo "[ERROR] Mount did not become ready at $MOUNT_DIR" >&2
+        return 1
+    fi
     echo "[JazzyFS] Mounted (PID=$JAZZYFS_PID, mode=$mode)"
 }
 

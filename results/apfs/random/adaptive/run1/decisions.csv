@@ -1,0 +1,16 @@
+run_index,run_label,mode,workload,timestamp,path,offset,size,phase,confidence,decay_rate,seek_delta,prefetch,prefetch_offset,prefetch_size,prefetch_depth,cache_hit,false_negative
+6,006_adaptive_random_run01,adaptive,random,1779906818.072667,/big.txt,20480,4096,unknown,0.0000,0.0000,0,0,,,1,-1,0
+6,006_adaptive_random_run01,adaptive,random,1779906818.0837948,/big.txt,491520,4096,irregular,0.0000,0.0000,466944,0,,,1,1,0
+6,006_adaptive_random_run01,adaptive,random,1779906818.094594,/big.txt,172032,4096,irregular,0.0000,0.0000,323584,0,,,1,-1,0
+6,006_adaptive_random_run01,adaptive,random,1779906818.103852,/big.txt,1228800,4096,seek-suppressed,0.0000,0.0000,1052672,0,,,1,1,0
+6,006_adaptive_random_run01,adaptive,random,1779906818.11448,/big.txt,69632,4096,seek-suppressed,0.0000,0.0000,1163264,0,,,1,-1,0
+6,006_adaptive_random_run01,adaptive,random,1779906818.124543,/big.txt,1024000,4096,irregular,0.0000,0.0000,950272,0,,,1,-1,0
+6,006_adaptive_random_run01,adaptive,random,1779906818.134637,/big.txt,360448,4096,irregular,0.0000,0.0000,667648,0,,,1,1,0
+6,006_adaptive_random_run01,adaptive,random,1779906818.144543,/big.txt,778240,4096,irregular,0.0000,0.0000,413696,0,,,1,-1,0
+6,006_adaptive_random_run01,adaptive,random,1779906818.154806,/big.txt,245760,4096,irregular,0.0000,0.0000,536576,0,,,1,1,0
+6,006_adaptive_random_run01,adaptive,random,1779906818.164503,/big.txt,40960,4096,irregular,0.0000,0.0000,208896,0,,,1,-1,0
+6,006_adaptive_random_run01,adaptive,random,1779906818.1744692,/big.txt,1126400,4096,seek-suppressed,0.0000,0.0000,1081344,0,,,1,-1,0
+6,006_adaptive_random_run01,adaptive,random,1779906818.1845388,/big.txt,135168,4096,irregular,0.0000,0.0000,995328,0,,,1,-1,0
+6,006_adaptive_random_run01,adaptive,random,1779906818.194537,/big.txt,655360,4096,irregular,0.0000,0.0000,516096,0,,,1,1,0
+6,006_adaptive_random_run01,adaptive,random,1779906818.20244,/big.txt,860160,4096,irregular,0.0000,0.0000,200704,0,,,1,-1,0
+6,006_adaptive_random_run01,adaptive,random,1779906818.21052,/big.txt,389120,4096,irregular,0.0000,0.0000,475136,0,,,1,-1,0

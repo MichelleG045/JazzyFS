@@ -1,0 +1,5 @@
+run_index,run_label,mode,workload,timestamp,path,offset,size,phase,confidence,decay_rate,seek_delta,prefetch,prefetch_offset,prefetch_size,prefetch_depth,cache_hit,false_negative
+14,014_baseline_seek_suppression_run01,baseline,seek_suppression,1779900424.694952,/big.txt,0,65536,unknown,0.0000,0.0000,0,1,65536,4096,1,0,0
+14,014_baseline_seek_suppression_run01,baseline,seek_suppression,1779900424.699799,/big.txt,65536,65536,sequential,1.0000,0.0000,0,1,131072,4096,1,0,0
+14,014_baseline_seek_suppression_run01,baseline,seek_suppression,1779900424.7055528,/big.txt,2121728,65536,irregular,0.5000,0.5000,1990656,1,2187264,4096,1,-1,0
+14,014_baseline_seek_suppression_run01,baseline,seek_suppression,1779900424.710594,/big.txt,2187264,65536,irregular,0.6667,0.0000,0,1,2252800,4096,1,-1,0

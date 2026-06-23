@@ -3,16 +3,20 @@
 generate_sonification_plots.py
 
 Synthesizes audio and generates spectrogram plots for all JazzyFS
-sonification combinations (3 modes × 8 workloads) using known parameters
-from experimental results.
+sonification combinations (3 modes × 8 workloads) using the current
+decision_summary.csv generated from experimental decision logs. The script
+fails if the summary data or decision logs are missing so it cannot create
+placeholder plots that look like real results.
 
 Outputs:
-  results/{platform}/sonification/audio/{mode}_{workload}.wav
-  results/{platform}/sonification/plots/{mode}_{workload}.png
-  results/{platform}/sonification/sonification_grid.png
+  results/{platform}/sonification/audio/Post workloads/{mode}_{workload}.wav
+  results/{platform}/sonification/plots/Post workloads/{mode}_{workload}.png
+  results/{platform}/sonification/plots/Post workloads/sonification_grid.png
 """
 
 import argparse
+import csv
+import hashlib
 import os
 import platform
 import wave
@@ -31,6 +35,7 @@ _parser.add_argument("--platform", default=None)
 _args, _ = _parser.parse_known_args()
 PLATFORM = _args.platform or ("apfs" if platform.system() == "Darwin" else "linux")
 OUT_DIR = os.path.join("results", PLATFORM, "sonification")
+POST_WORKLOAD_PLOT_DIR = os.path.join(OUT_DIR, "plots", "Post workloads")
 
 # --------------------------------------------------
 # Audio Constants (mirrored from jazzyfs.py)
@@ -58,10 +63,8 @@ _CHROMATIC_ROOTS_HZ = [
     329.63, 349.23, 369.99, 392.00, 415.30, 440.00, 466.16, 493.88, 523.25,
 ]
 
-ROOT_IDX = 0   # C3 — fixed for reproducibility across combinations
-
 # --------------------------------------------------
-# Workload Parameters (from experimental results)
+# Workload Parameters (loaded from experimental results)
 # --------------------------------------------------
 
 WORKLOADS = [
@@ -75,6 +78,18 @@ WORKLOADS = [
     "cache_lookup_workload",
 ]
 
+NATURAL_ROOTS = [
+    (0, "C"),
+    (2, "D"),
+    (4, "E"),
+    (5, "F"),
+    (7, "G"),
+    (9, "A"),
+    (11, "B"),
+]
+
+MODES = ["none", "baseline", "adaptive"]
+
 SHORT = {
     "sequential":            "Sequential",
     "random":                "Random",
@@ -86,23 +101,94 @@ SHORT = {
     "cache_lookup_workload": "Cache Lookup",
 }
 
-WORKLOAD_PARAMS = {
-    "sequential":            {"phase": "sequential", "confidence": 0.9994},
-    "random":                {"phase": "irregular",  "confidence": 0.0000},
-    "phase_change":          {"phase": "mixed",      "confidence": 0.9916},
-    "gradual_drift":         {"phase": "mixed",      "confidence": 0.6500},
-    "seek_suppression":      {"phase": "mixed",      "confidence": 0.7000},
-    "tar_workload":          {"phase": "sequential", "confidence": 0.9655},
-    "python_import":         {"phase": "irregular",  "confidence": 0.5004},
-    "cache_lookup_workload": {"phase": "irregular",  "confidence": 0.0000},
-}
+def load_workload_params():
+    """Load sonification parameters from regenerated experiment outputs."""
+    params = {}
+    summary_path = os.path.join("results", PLATFORM, "decision_summary.csv")
+    if not os.path.exists(summary_path):
+        raise FileNotFoundError(
+            f"Missing {summary_path}. Run experiments/result_summary.py --platform {PLATFORM} first."
+        )
 
-MODES = ["none", "baseline", "adaptive"]
+    with open(summary_path, newline="") as f:
+        for row in csv.DictReader(f):
+            workload = row.get("workload")
+            mode = row.get("mode")
+            if workload not in WORKLOADS or mode not in MODES:
+                continue
+            try:
+                confidence = float(row["avg_confidence"])
+            except (KeyError, ValueError):
+                continue
+            params[(mode, workload)] = {
+                "confidence": confidence,
+            }
+
+    missing = [(mode, workload) for mode in MODES for workload in WORKLOADS
+               if (mode, workload) not in params]
+    if missing:
+        raise RuntimeError(f"Missing sonification summary rows: {missing}")
+
+    for mode in MODES:
+        for workload in WORKLOADS:
+            pattern = infer_phase_pattern_from_decision_logs(workload, mode)
+            if not pattern:
+                raise RuntimeError(
+                    f"Could not infer phase pattern for {mode}/{workload}; missing or empty decision logs."
+                )
+            params[(mode, workload)]["pattern"] = pattern
+            params[(mode, workload)]["phase"] = summarize_phase_pattern(pattern)
+    return params
+
+
+def normalize_phase(phase):
+    if phase == "sequential":
+        return "sequential"
+    if phase in ("irregular", "seek-suppressed"):
+        return "irregular"
+    return None
+
+
+def infer_phase_pattern_from_decision_logs(workload, mode):
+    """Infer the ordered phase pattern from the first saved run."""
+    workload_dir = os.path.join("results", PLATFORM, workload, mode)
+    if not os.path.isdir(workload_dir):
+        return None
+
+    for run_name in sorted(os.listdir(workload_dir)):
+        decisions_path = os.path.join(workload_dir, run_name, "decisions.csv")
+        if not os.path.exists(decisions_path):
+            continue
+        pattern = []
+        with open(decisions_path, newline="") as f:
+            for row in csv.DictReader(f):
+                phase = normalize_phase(row.get("phase"))
+                if phase and (not pattern or pattern[-1] != phase):
+                    pattern.append(phase)
+        if pattern:
+            return pattern
+    return None
+
+
+def summarize_phase_pattern(pattern):
+    if len(set(pattern)) > 1:
+        return "mixed"
+    return pattern[0]
+
+
+WORKLOAD_PARAMS = load_workload_params()
+
 MODE_LABELS = {
     "none":     "None (Major)",
     "baseline": "Baseline (Natural Minor)",
     "adaptive": "Adaptive (Harmonic Minor)",
 }
+
+
+def _root_for(mode, workload):
+    seed = os.environ.get("JAZZYFS_ROOT_SEED", "jazzyfs")
+    digest = hashlib.sha256(f"{seed}:{mode}:{workload}".encode("utf-8")).digest()
+    return NATURAL_ROOTS[digest[0] % len(NATURAL_ROOTS)]
 
 # --------------------------------------------------
 # Audio Synthesis
@@ -133,8 +219,9 @@ def _overlay(track, signal, at_sample):
     return track
 
 
-def _generate_segment(mode, tempo, confidence):
-    root_hz   = _CHROMATIC_ROOTS_HZ[ROOT_IDX]
+def _generate_segment(mode, workload, tempo, confidence):
+    root_idx, _ = _root_for(mode, workload)
+    root_hz   = _CHROMATIC_ROOTS_HZ[root_idx]
     scale_hz  = _build_scale(root_hz, SCALE_INTERVALS[mode])
     n         = len(scale_hz)        # 7
     n_notes   = n + 1                # 8
@@ -195,21 +282,14 @@ def _generate_segment(mode, tempo, confidence):
 
 
 def generate_audio(mode, workload):
-    params     = WORKLOAD_PARAMS[workload]
+    params     = WORKLOAD_PARAMS[(mode, workload)]
     confidence = params["confidence"]
-    phase      = params["phase"]
-
-    if phase == "sequential":
-        patterns = ["sequential"]
-    elif phase == "irregular":
-        patterns = ["irregular"]
-    else:
-        patterns = ["sequential", "irregular"]
+    patterns   = params["pattern"]
 
     segments = []
     for p in patterns:
         tempo = FAST if p == "sequential" else SLOW
-        segments.append(_generate_segment(mode, tempo, confidence))
+        segments.append(_generate_segment(mode, workload, tempo, confidence))
 
     audio = np.concatenate(segments)
     peak  = np.max(np.abs(audio))
@@ -258,14 +338,16 @@ def _plot_one(ax_wave, ax_spec, audio, title,
 def plot_individual(audio, mode, workload, path):
     fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(9, 6.5),
                                     gridspec_kw={"height_ratios": [1, 2]})
-    title = f"{SHORT[workload]}  |  Mode: {MODE_LABELS[mode]}"
+    _, root_label = _root_for(mode, workload)
+    title = f"{SHORT[workload]}  |  Mode: {MODE_LABELS[mode]}  |  Root: {root_label}"
     _plot_one(ax1, ax2, audio, title, title_fs=16, label_fs=14, tick_fs=12)
 
-    conf  = WORKLOAD_PARAMS[workload]["confidence"]
-    phase = WORKLOAD_PARAMS[workload]["phase"]
+    conf  = WORKLOAD_PARAMS[(mode, workload)]["confidence"]
+    phase = WORKLOAD_PARAMS[(mode, workload)]["phase"]
+    pattern = "-".join(WORKLOAD_PARAMS[(mode, workload)]["pattern"])
     direction = "ascending" if conf >= 0.5 else "descending"
     fig.text(0.01, 0.01,
-             f"phase={phase}   confidence={conf:.4f}   melody={direction}",
+             f"phase={phase}   pattern={pattern}   confidence={conf:.4f}   melody={direction}   root={root_label}",
              fontsize=12, color="#555555")
     plt.tight_layout(rect=[0, 0.03, 1, 1])
     os.makedirs(os.path.dirname(path), exist_ok=True)
@@ -296,9 +378,10 @@ def plot_grid(all_audio):
             ax_w = fig.add_subplot(inner[0])
             ax_s = fig.add_subplot(inner[1])
 
-            conf      = WORKLOAD_PARAMS[workload]["confidence"]
+            conf      = WORKLOAD_PARAMS[(mode, workload)]["confidence"]
             direction = "↑" if conf >= 0.5 else "↓"
-            title     = f"{SHORT[workload]} / {mode}  {direction} conf={conf:.2f}"
+            _, root_label = _root_for(mode, workload)
+            title     = f"{SHORT[workload]} / {mode}  root={root_label}  {direction} conf={conf:.2f}"
             _plot_one(ax_w, ax_s, audio, title,
                       title_fs=15, label_fs=12, tick_fs=11)
 
@@ -312,13 +395,13 @@ def plot_grid(all_audio):
 
     # Column headers
     for col, mode in enumerate(MODES):
-        first_ax = fig.axes[col * 4]  # 2 axes per cell × col offset
+        first_ax = fig.axes[col * 2]  # first row, two axes per cell
         first_ax.set_title(
             f"— {MODE_LABELS[mode]} —\n{first_ax.get_title()}",
             fontsize=16, fontweight="bold", pad=5
         )
 
-    path = os.path.join(OUT_DIR, "sonification_grid.png")
+    path = os.path.join(POST_WORKLOAD_PLOT_DIR, "sonification_grid.png")
     plt.savefig(path, dpi=150, bbox_inches="tight")
     plt.close()
     print(f"[OK] Grid figure → {path}")
@@ -344,13 +427,14 @@ def plot_mode_grid(all_audio, mode):
         ax_w = fig.add_subplot(inner[0])
         ax_s = fig.add_subplot(inner[1])
 
-        conf = WORKLOAD_PARAMS[workload]["confidence"]
+        conf = WORKLOAD_PARAMS[(mode, workload)]["confidence"]
         direction = "ascending" if conf >= 0.5 else "descending"
-        title = f"{SHORT[workload]}  |  conf={conf:.2f}, {direction}"
+        _, root_label = _root_for(mode, workload)
+        title = f"{SHORT[workload]}  |  root={root_label}, conf={conf:.2f}, {direction}"
         _plot_one(ax_w, ax_s, audio, title,
                   title_fs=18, label_fs=14, tick_fs=12)
 
-    path = os.path.join(OUT_DIR, f"sonification_grid_{mode}.png")
+    path = os.path.join(POST_WORKLOAD_PLOT_DIR, f"sonification_grid_{mode}.png")
     plt.savefig(path, dpi=220, bbox_inches="tight")
     plt.close()
     print(f"[OK] {mode} grid figure → {path}")
@@ -362,8 +446,8 @@ def plot_mode_grid(all_audio, mode):
 
 def main():
     os.makedirs(OUT_DIR, exist_ok=True)
-    audio_dir = os.path.join(OUT_DIR, "audio")
-    plot_dir  = os.path.join(OUT_DIR, "plots")
+    audio_dir = os.path.join(OUT_DIR, "audio", "Post workloads")
+    plot_dir  = POST_WORKLOAD_PLOT_DIR
     os.makedirs(audio_dir, exist_ok=True)
     os.makedirs(plot_dir,  exist_ok=True)
 

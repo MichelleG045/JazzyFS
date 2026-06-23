@@ -1,0 +1,5 @@
+run_index,run_label,mode,workload,seq,timestamp,path,offset,size
+14,014_baseline_seek_suppression_run01,baseline,seek_suppression,1,1779900424.69457,/big.txt,0,65536
+14,014_baseline_seek_suppression_run01,baseline,seek_suppression,2,1779900424.699457,/big.txt,65536,65536
+14,014_baseline_seek_suppression_run01,baseline,seek_suppression,3,1779900424.7042189,/big.txt,2121728,65536
+14,014_baseline_seek_suppression_run01,baseline,seek_suppression,4,1779900424.710239,/big.txt,2187264,65536

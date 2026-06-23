@@ -1,0 +1,5 @@
+run_index,run_label,mode,workload,seq,timestamp,path,offset,size
+15,015_adaptive_seek_suppression_run01,adaptive,seek_suppression,1,1779900426.726349,/big.txt,0,65536
+15,015_adaptive_seek_suppression_run01,adaptive,seek_suppression,2,1779900426.731251,/big.txt,65536,65536
+15,015_adaptive_seek_suppression_run01,adaptive,seek_suppression,3,1779900426.734617,/big.txt,2121728,65536
+15,015_adaptive_seek_suppression_run01,adaptive,seek_suppression,4,1779900426.738129,/big.txt,2187264,65536

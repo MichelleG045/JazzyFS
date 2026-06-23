@@ -70,7 +70,7 @@ def read_seek_frequencies(path, max_points):
 
 
 def plot_seek_sonification(platform, run, max_points):
-    out_dir = os.path.join("results", platform, "sonification")
+    out_dir = os.path.join("results", platform, "sonification", "plots", "Seek tones")
     os.makedirs(out_dir, exist_ok=True)
     out_path = os.path.join(out_dir, "seek_tone_by_workload.png")
 
@@ -115,7 +115,7 @@ def plot_seek_sonification(platform, run, max_points):
     for ax in axes[::2]:
         ax.set_ylabel("Seek tone frequency (Hz)")
 
-    fig.suptitle("Real-Time Seek Sonification by Workload (Adaptive Mode)", y=0.995)
+    fig.suptitle(f"Real-Time Seek Sonification by Workload (Adaptive Mode, Run {run})", y=0.995)
     fig.text(
         0.5,
         0.015,

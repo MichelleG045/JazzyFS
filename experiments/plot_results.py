@@ -85,6 +85,9 @@ def load_timing_summary():
                     "avg":  float(row["avg_real"]),
                     "ci95": float(row["ci95_real"]),
                     "std":  float(row["std_real"]),
+                    "overhead_vs_native": float(
+                        row.get("overhead_vs_native", "0").replace("+", "").replace("%", "")
+                    ),
                 }
             except (ValueError, KeyError):
                 continue
@@ -156,14 +159,7 @@ def plot_overhead_percent(timing):
     offsets = [-1, 0, 1]
 
     for idx, mode in enumerate(MODES):
-        pcts = []
-        for w in WORKLOADS:
-            native = timing.get((w, "native"), {}).get("avg")
-            mode_t = timing.get((w, mode), {}).get("avg")
-            if native and mode_t and native > 0:
-                pcts.append(((mode_t - native) / native) * 100)
-            else:
-                pcts.append(0)
+        pcts = [timing.get((w, mode), {}).get("overhead_vs_native", 0) for w in WORKLOADS]
         ax.bar(x + offsets[idx] * width, pcts, width,
                label=mode, color=COLORS[mode], alpha=0.9)
 
@@ -224,8 +220,8 @@ def plot_confidence(decisions):
         ax.bar(x + offsets[idx] * width, confs, width,
                label=mode, color=COLORS[mode], yerr=stds, capsize=3, alpha=0.9)
 
-    ax.axhline(0.5, color="red", linestyle="--", linewidth=1.2,
-               label="threshold (ascending ↔ descending)")
+    ax.axhline(0.7, color="red", linestyle="--", linewidth=1.2,
+               label="adaptive prefetch threshold")
     ax.set_xlabel("Workload")
     ax.set_ylabel("Average Confidence Score")
     ax.set_title("Phase Detection Confidence by Workload and Mode")

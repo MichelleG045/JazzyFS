@@ -1,79 +1,94 @@
 # JazzyFS
 
-JazzyFS is a research filesystem that makes adaptive prefetching **transparent, measurable, and controllable** — three things no existing filesystem provides today.
+JazzyFS is a read-only FUSE filesystem prototype for studying adaptive file
+prefetching and filesystem observability. It was built for the MS thesis
+*JazzyFS: Adaptive File Prefetching with Runtime Suppression Signals and
+Sonification*.
 
-Modern filesystems like Linux already do adaptive prefetching: they try to predict what data you will need next and load it in advance. But they do this using hidden internal heuristics. You cannot see what the system is thinking, you cannot tune it without modifying kernel code, and when the workload changes the system reacts slowly because it has no explicit signal to act on.
+The prototype records per-read runtime signals such as phase, confidence,
+confidence decay, seek distance, prefetch decisions, cache-hit feedback, and
+false negatives. It also includes sonification tools that turn workload
+behavior into post-workload musical summaries and seek-tone audio.
 
-JazzyFS replaces those hidden heuristics with explicit per-read signals. The current thesis version focuses on three contributions:
+JazzyFS is a research prototype, not a replacement for native Linux/ext4. The
+thesis performance and decision results are collected on Linux/ext4. The
+macOS/APFS runs are used for sonification outputs and do not make APFS
+performance claims.
 
-1. **Confidence decay rate detection** — if confidence drops sharply in a single read, prefetching stops immediately rather than waiting several reads for the heuristic to catch up
-2. **Seek-distance suppression** — large byte jumps are measured directly and suppress prefetching because speculative sequential reads are unlikely to be useful
-3. **Observability through sonification** — seek distance, phase, confidence, and prefetch mode are mapped to musical signals so operators can hear filesystem behavior
+## Contributions
 
-JazzyFS is implemented as a FUSE filesystem in Python, runs cross-platform on Linux ext4 and macOS APFS, and requires no kernel modification.
+The thesis version focuses on:
 
----
-
-## Key Results
-
-| Metric | Result |
-|--------|--------|
-| Phase change detection speed | 1 read (vs 2–3 reads with threshold-only) |
-| Seek suppression threshold | Tunable at runtime via environment variable |
-| Platforms | Linux ext4, macOS APFS |
-
----
+1. A FUSE-based filesystem prototype for studying adaptive prefetching.
+2. Confidence and confidence-decay signals for workload phase behavior.
+3. Seek-distance suppression for large offset jumps.
+4. Linux/ext4 experiments across eight workloads and three prefetching modes.
+5. Native Linux page-cache hit/miss comparison using `cachestat-bpfcc`.
+6. Sonification outputs for observing filesystem access behavior.
 
 ## Repository Layout
 
-```
+```text
 source/
-  jazzyfs.py                  — FUSE filesystem implementation
-
-experiments/
-  run_all.sh                  — full end-to-end pipeline
-  run_experiments.sh          — main experiment runner (all modes, all workloads)
-  run_seek_suppression_sweep.sh — seek threshold sweep
-  run_timing_interleaved.sh   — native and JazzyFS timing in one interleaved run
-  result_summary.py           — aggregate timing and decision logs to CSV
-  plot_results.py             — generate thesis figures
-  generate_sonification_plots.py — generate sonification music/spectrograms
-  decay_rate_analysis.py      — measure phase change reaction speed
-  seek_analysis.py            — summarize seek distance and suppression behavior
-  test_sonification.sh        — live sonification smoke test
+  jazzyfs.py                         FUSE filesystem implementation
 
 workloads/
-  synthetic/                  — sequential, random, phase_change, gradual_drift, seek_suppression
-  real/                       — tar_workload, python_import, cache_lookup_workload
-  setup/setup_test_data.sh    — generate source_data/
+  synthetic/                         sequential, random, phase_change,
+                                     gradual_drift, seek_suppression
+  real/                              tar_workload, python_import,
+                                     cache_lookup_workload
+  setup/setup_test_data.sh           creates source_data/
+
+experiments/
+  run_experiments.sh                 runs JazzyFS modes and saves logs
+  run_timing_interleaved.sh          native Linux/ext4 and JazzyFS timing
+  run_linux_cache_hit_comparison.sh  native Linux page-cache hit/miss data
+  summarize_linux_cache_hit_comparison.py
+  result_summary.py                  aggregates timing and decision logs
+  plot_results.py                    creates thesis performance figures
+  generate_sonification_plots.py     creates post-workload audio and plots
+  generate_seek_tone_audio.py        creates seek-tone WAV files from logs
+  plot_seek_sonification.py          creates the seek-tone figure
+  play_post_workload_sonification.sh runs one workload and refreshes one
+                                     post-workload WAV
+  play_all_post_workload_sonification.sh
+  play_seek_tone_sonification.sh     runs one workload and refreshes one
+                                     seek-tone WAV
+  play_all_seek_tone_sonification.sh
 
 results/
-  linux/                      — Linux ext4 experiment results
-  apfs/                       — generated on macOS when experiments are run
-```
+  linux/                             Linux/ext4 results used for claims
+  apfs/                              macOS/APFS sonification outputs
 
----
+thesis/
+  thesis.tex                         thesis source
+  references.bib                     bibliography
+```
 
 ## Requirements
 
 - Python 3.10+
 - `fusepy`
-- macOS: macFUSE — Linux: `libfuse2`
-- SoX (`play` command) for sonification/music playback
+- `matplotlib`
+- `numpy`
+- macOS: macFUSE
+- Linux: FUSE support such as `libfuse2`
+- SoX `play` command for live terminal sonification playback
+- Linux cache comparison: `bpfcc-tools` / `cachestat-bpfcc` on Ubuntu
 
----
-
-## Setup
+Install Python dependencies:
 
 ```bash
 python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
-
-bash workloads/setup/setup_test_data.sh
 ```
 
----
+Create test data:
+
+```bash
+bash workloads/setup/setup_test_data.sh
+```
 
 ## Running JazzyFS
 
@@ -84,7 +99,7 @@ mkdir -p mount
 JAZZYFS_MODE=adaptive JAZZYFS_SOUND=0 python3 source/jazzyfs.py source_data mount
 ```
 
-Run a workload in another terminal:
+Run a workload from another terminal:
 
 ```bash
 bash workloads/synthetic/sequential.sh
@@ -100,91 +115,118 @@ fusermount -u mount
 diskutil unmount mount
 ```
 
----
-
 ## Configuration
 
-All behavior is controlled via environment variables — no kernel modification required.
-
 | Variable | Default | Description |
-|----------|---------|-------------|
+| --- | --- | --- |
 | `JAZZYFS_MODE` | `adaptive` | `none`, `baseline`, or `adaptive` |
-| `JAZZYFS_CONFIDENCE_THRESHOLD` | `0.7` | Minimum confidence to issue a prefetch |
-| `JAZZYFS_DECAY_THRESHOLD` | `0.25` | Confidence drop that triggers immediate suppression |
+| `JAZZYFS_CONFIDENCE_THRESHOLD` | `0.7` | Minimum confidence for adaptive prefetching |
+| `JAZZYFS_DECAY_THRESHOLD` | `0.25` | Confidence drop that suppresses prefetching |
 | `JAZZYFS_SEEK_SUPPRESS_THRESHOLD` | `1048576` | Seek distance in bytes that suppresses adaptive prefetching |
-| `JAZZYFS_PREFETCH_DEPTH` | `1` | Blocks to read ahead per prefetch |
-| `JAZZYFS_SOUND` | `0` | `1` enables sonification/music playback |
+| `JAZZYFS_PREFETCH_DEPTH` | `1` | Number of blocks to read ahead per prefetch |
+| `JAZZYFS_SOUND` | `0` | `1` enables sonification playback |
+| `JAZZYFS_SEEK_SOUND` | `1` | `0` disables live seek tones while keeping other sound behavior available |
 
-Example — run with a more conservative threshold:
+Example:
 
 ```bash
 JAZZYFS_MODE=adaptive JAZZYFS_CONFIDENCE_THRESHOLD=0.9 JAZZYFS_SOUND=0 \
   python3 source/jazzyfs.py source_data mount
 ```
 
----
+## Reproducing Results
 
-## Reproducing All Results
-
-Run the full pipeline:
+Run the main JazzyFS workload experiments:
 
 ```bash
-bash experiments/run_all.sh
+RUNS=20 PYTHON=venv/bin/python bash experiments/run_experiments.sh source_data mount
+python3 experiments/result_summary.py
 ```
 
-This runs all experiments, the seek-threshold sweep, figures, and claim analysis scripts. Individual steps:
+Run Linux/ext4 timing experiments:
 
 ```bash
-bash experiments/run_experiments.sh              # decision + access logs, all modes
-bash experiments/run_timing_interleaved.sh       # native + JazzyFS timing
-bash experiments/run_seek_suppression_sweep.sh   # seek threshold sweep
-python3 experiments/result_summary.py            # aggregate to CSV
-python3 experiments/plot_results.py              # generate figures
-python3 experiments/generate_sonification_plots.py # generate sonification music/spectrograms
-python3 experiments/decay_rate_analysis.py       # phase change reaction speed
-python3 experiments/seek_analysis.py             # seek suppression results
+bash experiments/run_timing_interleaved.sh source_data mount
+python3 experiments/plot_results.py
 ```
 
----
+Run native Linux page-cache hit/miss comparison:
 
-## Output Files
+```bash
+RUNS=20 bash experiments/run_linux_cache_hit_comparison.sh source_data mount
+python3 experiments/summarize_linux_cache_hit_comparison.py
+```
 
-| File | Description |
-|------|-------------|
-| `logs/decisions.csv` | Per-read phase, confidence, decay_rate, seek_delta, prefetch decision |
-| `results/{platform}/timing_summary.csv` | Wall-clock timing per workload per mode |
-| `results/{platform}/decision_summary.csv` | Prefetch rate and confidence per workload per mode |
-| `results/{platform}/decay_rate_analysis.csv` | Phase change reaction speed per run |
-| `results/{platform}/seek_analysis.csv` | Seek distance and suppression summary |
-| `results/{platform}/seek_suppression_sweep/seek_suppression_sweep.csv` | Seek threshold sweep results |
-| `results/{platform}/sonification/` | Generated music and spectrograms for observability |
-| `results/{platform}/figures/` | Thesis figures |
+Generate APFS sonification outputs from saved APFS decision logs:
 
----
+```bash
+MPLCONFIGDIR=/private/tmp python3 experiments/generate_sonification_plots.py --platform apfs
+python3 experiments/generate_seek_tone_audio.py --platform apfs --mode adaptive --run 1
+MPLCONFIGDIR=/private/tmp python3 experiments/plot_seek_sonification.py --platform apfs --run 1
+```
+
+The convenience pipeline is also available:
+
+```bash
+bash experiments/run_all.sh source_data mount
+```
 
 ## Sonification
 
-JazzyFS maps filesystem behavior to music:
+JazzyFS has two sonification paths.
 
-- **Seek tone** — non-zero seek distance plays a short musical tone; larger jumps are higher pitched
-- **Scale** — mode determines the musical scale (adaptive → Harmonic Minor)
-- **Tempo** — sequential access plays fast, irregular access plays slow
-- **Melody direction** — high confidence ascends, low confidence descends
+Post-workload summaries are generated after workloads finish. They map:
 
-Enable with `JAZZYFS_SOUND=1`. Requires SoX.
+- mode to scale quality: `none` = major, `baseline` = natural minor,
+  `adaptive` = harmonic minor
+- phase to tempo: sequential is faster, irregular is slower
+- confidence to melody direction: high confidence ascends, low confidence descends
+- root note to one of the natural notes A through G
 
----
+Seek-tone audio maps seek distance to short tones:
+
+- contiguous reads are silent
+- small nonzero seeks are lower-pitched
+- larger offset jumps are higher-pitched
+
+The public audio archive is available at:
+
+```text
+https://michelleg045.github.io/jazzyfs-audio/
+```
+
+It contains 24 post-workload WAV files and 8 adaptive-mode seek-tone WAV files.
+
+## Output Files
+
+| Path | Description |
+| --- | --- |
+| `logs/access.csv` | Per-read access log |
+| `logs/decisions.csv` | Per-read phase, confidence, decay, seek, prefetch, cache-hit, and false-negative data |
+| `results/linux/timing_summary.csv` | Linux/ext4 timing summary |
+| `results/linux/decision_summary.csv` | Linux/ext4 decision summary |
+| `results/linux/native/linux_cache_hit_miss_summary.csv` | Native Linux page-cache comparison |
+| `results/linux/figures/` | Thesis result figures |
+| `results/apfs/sonification/audio/Post workloads/` | Post-workload WAV summaries |
+| `results/apfs/sonification/audio/seek_tones/` | Adaptive seek-tone WAV files |
+| `results/apfs/sonification/plots/Post workloads/` | Sonification spectrogram plots |
+| `results/apfs/sonification/plots/Seek tones/` | Seek-tone plot |
 
 ## Limitations
 
-JazzyFS is a research prototype. FUSE user-space overhead means wall-clock timing results reflect the cost of the interception layer, not the prefetching algorithm itself. A kernel-level implementation would eliminate this overhead. The contribution is the mechanism — explicit confidence decay, seek-distance gating, and audible observability — not end-to-end throughput.
+JazzyFS runs in user space through FUSE, so elapsed timing includes FUSE
+overhead. Timing results should therefore be read as prototype overhead, not as
+evidence that JazzyFS is faster than native Linux/ext4. The stronger evidence
+for the thesis comes from the decision logs, prefetch rate, confidence, seek
+suppression, cache-hit behavior, false negatives, and sonification outputs.
 
----
+The performance results are Linux/ext4-only. APFS outputs are used for
+sonification demonstration and future-work context.
 
-## MS Thesis
+## Thesis
 
-This project is the implementation for Michelle Gurovith's MS thesis at UC Santa Cruz (2026):
+Michelle Gurovith, *JazzyFS: Adaptive File Prefetching with Runtime Suppression
+Signals and Sonification*, MS thesis, University of California, Santa Cruz,
+2026.
 
-> *JazzyFS: Making Filesystem Prefetching Transparent, Reactive, and Controllable Through Explicit Confidence Signals*
-
-Advisor: Scott Brandt, University of California, Santa Cruz.
+Advisor: Professor Scott Brandt.

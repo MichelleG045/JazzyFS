@@ -1,0 +1,13 @@
+run_index,run_label,mode,workload,timestamp,path,offset,size,phase,confidence,decay_rate,seek_delta,prefetch,prefetch_offset,prefetch_size,prefetch_depth,cache_hit,false_negative
+10,010_none_gradual_drift_run01,none,gradual_drift,1779900416.455832,/big.txt,0,65536,unknown,0.0000,0.0000,0,0,,,1,0,0
+10,010_none_gradual_drift_run01,none,gradual_drift,1779900416.4596548,/big.txt,65536,65536,sequential,1.0000,0.0000,0,0,,,1,0,0
+10,010_none_gradual_drift_run01,none,gradual_drift,1779900416.463756,/big.txt,131072,65536,sequential,1.0000,0.0000,0,0,,,1,0,0
+10,010_none_gradual_drift_run01,none,gradual_drift,1779900416.468609,/big.txt,196608,65536,sequential,1.0000,0.0000,0,0,,,1,0,0
+10,010_none_gradual_drift_run01,none,gradual_drift,1779900416.4726982,/big.txt,262144,65536,sequential,1.0000,0.0000,0,0,,,1,0,0
+10,010_none_gradual_drift_run01,none,gradual_drift,1779900416.476636,/big.txt,327680,65536,sequential,1.0000,0.0000,0,0,,,1,0,0
+10,010_none_gradual_drift_run01,none,gradual_drift,1779900416.48066,/big.txt,393216,65536,sequential,1.0000,0.0000,0,0,,,1,0,0
+10,010_none_gradual_drift_run01,none,gradual_drift,1779900416.484758,/big.txt,458752,65536,sequential,1.0000,0.0000,0,0,,,1,0,0
+10,010_none_gradual_drift_run01,none,gradual_drift,1779900416.48862,/big.txt,524288,65536,sequential,1.0000,0.0000,0,0,,,1,0,0
+10,010_none_gradual_drift_run01,none,gradual_drift,1779900416.492569,/big.txt,589824,65536,sequential,1.0000,0.0000,0,0,,,1,0,0
+10,010_none_gradual_drift_run01,none,gradual_drift,1779900416.496726,/big.txt,655360,65536,sequential,1.0000,0.0000,0,0,,,1,0,0
+10,010_none_gradual_drift_run01,none,gradual_drift,1779900416.50059,/big.txt,720896,65536,sequential,1.0000,0.0000,0,0,,,1,0,0
